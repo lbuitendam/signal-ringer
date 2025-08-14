@@ -1,21 +1,9 @@
 @"
-yfinance
-pandas
-numpy
-matplotlib
-seaborn
-plotly
-mplfinance
-ta
-quantstats
-finta
-scikit-learn
-xgboost
-lightgbm
-statsmodels
-streamlit
-dash
-backtrader
+streamlit>=1.33
+plotly>=5.20
+yfinance>=0.2.40
+pandas>=2.2
+numpy>=1.26
 pytz>=2024.1
 tzlocal>=5.2
 "@ | Out-File -Encoding UTF8 requirements.txt
