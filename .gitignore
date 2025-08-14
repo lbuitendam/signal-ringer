@@ -1,0 +1,15 @@
+@"
+__pycache__/
+*.pyc
+venv/
+.venv/
+.DS_Store
+Thumbs.db
+.vscode/
+.env
+.streamlit/secrets.toml
+build/
+dist/
+*.exe
+*.pkg
+"@ | Out-File -Encoding UTF8 .gitignore

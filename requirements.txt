@@ -1,0 +1,21 @@
+@"
+yfinance
+pandas
+numpy
+matplotlib
+seaborn
+plotly
+mplfinance
+ta
+quantstats
+finta
+scikit-learn
+xgboost
+lightgbm
+statsmodels
+streamlit
+dash
+backtrader
+pytz>=2024.1
+tzlocal>=5.2
+"@ | Out-File -Encoding UTF8 requirements.txt

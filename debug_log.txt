@@ -1,0 +1,2041 @@
+2025-08-13 14:55:00.121295 - Fetched 959 rows for CL=F | Period=1 Day | Resolution=1 Minute
+2025-08-13 14:55:00.121719 - Columns: [('Adj Close', 'CL=F'), ('Close', 'CL=F'), ('High', 'CL=F'), ('Low', 'CL=F'), ('Open', 'CL=F'), ('Volume', 'CL=F')]
+2025-08-13 14:55:58.522416 - Fetched 3613 rows for CL=F | Period=5 Days | Resolution=1 Minute
+2025-08-13 14:55:58.522802 - Columns: [('Adj Close', 'CL=F'), ('Close', 'CL=F'), ('High', 'CL=F'), ('Low', 'CL=F'), ('Open', 'CL=F'), ('Volume', 'CL=F')]
+2025-08-13 14:56:06.454752 - Fetched 2 rows for CL=F | Period=5 Days | Resolution=1 Week
+2025-08-13 14:56:06.455164 - Columns: [('Adj Close', 'CL=F'), ('Close', 'CL=F'), ('High', 'CL=F'), ('Low', 'CL=F'), ('Open', 'CL=F'), ('Volume', 'CL=F')]
+2025-08-13 14:56:10.032557 - Fetched 1304 rows for CL=F | Period=Max | Resolution=1 Week
+2025-08-13 14:56:10.033011 - Columns: [('Adj Close', 'CL=F'), ('Close', 'CL=F'), ('High', 'CL=F'), ('Low', 'CL=F'), ('Open', 'CL=F'), ('Volume', 'CL=F')]
+2025-08-13 14:56:12.667968 - Fetched 257 rows for CL=F | Period=Max | Resolution=1 Month
+2025-08-13 14:56:12.668508 - Columns: [('Adj Close', 'CL=F'), ('Close', 'CL=F'), ('High', 'CL=F'), ('Low', 'CL=F'), ('Open', 'CL=F'), ('Volume', 'CL=F')]
+2025-08-13 14:56:13.909675 - System error: '>' not supported between instances of 'NoneType' and 'datetime.timedelta'
+2025-08-13 14:56:19.366638 - Fetched 6270 rows for CL=F | Period=Max | Resolution=1 Day
+2025-08-13 14:56:19.366976 - Columns: [('Adj Close', 'CL=F'), ('Close', 'CL=F'), ('High', 'CL=F'), ('Low', 'CL=F'), ('Open', 'CL=F'), ('Volume', 'CL=F')]
+2025-08-13 15:01:25.800968 - Fetched 959 rows for CL=F | Period=1 Day | Resolution=1 Minute
+2025-08-13 15:01:25.801544 - Columns: [('Adj Close', 'CL=F'), ('Close', 'CL=F'), ('High', 'CL=F'), ('Low', 'CL=F'), ('Open', 'CL=F'), ('Volume', 'CL=F')]
+2025-08-13 15:03:36.506300 - Ready to plot: 959 rows for CL=F | Period=1 Day | Resolution=1 Minute
+2025-08-13 15:04:08.326938 - Ready to plot: 959 rows for CL=F | Period=1 Day | Resolution=1 Minute
+2025-08-13 15:04:19.369275 - Ready to plot: 1378 rows for EURGBP=X | Period=1 Day | Resolution=1 Minute
+2025-08-13 15:05:16.129581 - Ready to plot: 959 rows for CL=F | Period=1 Day | Resolution=1 Minute
+2025-08-13 15:43:12.656633 - Ready to plot: 960 rows for CL=F | Period=1 Day | Resolution=1 Minute
+2025-08-13 15:43:18.054625 - Ready to plot: 30 rows for GOOGL | Period=1 Day | Resolution=1 Minute
+2025-08-13 15:43:25.593859 - Ready to plot: 1584 rows for GOOGL | Period=1 Month | Resolution=1 Minute
+2025-08-13 15:43:46.775549 - Ready to plot: 1584 rows for GOOGL | Period=5 Years | Resolution=1 Minute
+2025-08-13 15:43:57.498121 - Ready to plot: 262 rows for GOOGL | Period=5 Years | Resolution=1 Week
+2025-08-13 15:44:06.012579 - Ready to plot: 1255 rows for GOOGL | Period=5 Years | Resolution=1 Day
+2025-08-13 15:44:42.104442 - Ready to plot: 2 rows for GOOGL | Period=1 Day | Resolution=1 Day
+2025-08-13 15:44:44.488323 - Ready to plot: 30 rows for GOOGL | Period=1 Day | Resolution=1 Minute
+2025-08-13 15:45:20.904250 - Ready to plot: 2 rows for GOOGL | Period=1 Day | Resolution=30 Minutes
+2025-08-13 15:45:26.574555 - Ready to plot: 28 rows for GOOGL | Period=5 Days | Resolution=30 Minutes
+2025-08-13 15:50:36.410008 - Ready to plot: 960 rows for CL=F | Period=1 Day | Resolution=1 Minute
+2025-08-13 15:54:55.488262 - Plotting 957 rows for CL=F
+2025-08-13 15:55:06.761459 - Plotting 6307 rows for CL=F
+2025-08-13 15:56:34.981227 - Plotting 957 rows for CL=F
+2025-08-13 15:56:40.733032 - Plotting 957 rows for CL=F
+2025-08-13 15:56:45.796906 - Plotting 28 rows for MSFT
+2025-08-13 15:56:54.187611 - Plotting 1582 rows for MSFT
+2025-08-13 16:00:42.005271 - Ready to plot: 957 rows for CL=F | Period=1 Day | Resolution=1 Minute
+2025-08-13 16:00:49.206005 - Ready to plot: 957 rows for CL=F | Period=1 Day | Resolution=1 Minute
+2025-08-13 16:00:56.242394 - Ready to plot: 30 rows for MSFT | Period=1 Day | Resolution=1 Minute
+2025-08-13 16:01:01.908468 - Ready to plot: 1585 rows for MSFT | Period=3 Months | Resolution=1 Minute
+2025-08-13 16:01:12.129523 - Ready to plot: 1585 rows for MSFT | Period=3 Months | Resolution=1 Minute
+2025-08-13 16:01:19.302233 - Empty after normalization for EURUSD=X | Columns in raw: ['Adj Close', 'Close', 'High', 'Low', 'Open', 'Volume']
+2025-08-13 16:01:25.348512 - Empty after normalization for EURUSD=X | Columns in raw: ['Adj Close', 'Close', 'High', 'Low', 'Open', 'Volume']
+2025-08-13 16:01:30.125900 - Empty after normalization for EURUSD=X | Columns in raw: ['Adj Close', 'Close', 'High', 'Low', 'Open', 'Volume']
+2025-08-13 16:01:31.686568 - Empty after normalization for EURUSD=X | Columns in raw: ['Adj Close', 'Close', 'High', 'Low', 'Open', 'Volume']
+2025-08-13 16:01:33.682293 - Empty after normalization for EURUSD=X | Columns in raw: ['Adj Close', 'Close', 'High', 'Low', 'Open', 'Volume']
+2025-08-13 16:01:35.190946 - Empty after normalization for EURUSD=X | Columns in raw: ['Adj Close', 'Close', 'High', 'Low', 'Open', 'Volume']
+2025-08-13 16:01:45.958011 - Ready to plot: 2 rows for CL=F | Period=1 Day | Resolution=1 Day
+2025-08-13 16:01:50.089165 - Ready to plot: 250 rows for CL=F | Period=1 Year | Resolution=1 Day
+2025-08-13 16:01:58.509273 - Ready to plot: 23 rows for CL=F | Period=1 Month | Resolution=1 Day
+2025-08-13 16:02:02.856001 - Ready to plot: 469 rows for CL=F | Period=1 Month | Resolution=1 Hour
+2025-08-13 16:02:11.329028 - Ready to plot: 60 rows for CL=F | Period=5 Days | Resolution=1 Hour
+2025-08-13 16:02:23.160131 - Ready to plot: 4 rows for CL=F | Period=5 Days | Resolution=1 Day
+2025-08-13 16:02:29.184030 - Ready to plot: 23 rows for CL=F | Period=1 Month | Resolution=1 Day
+2025-08-13 16:02:31.867647 - Ready to plot: 1913 rows for CL=F | Period=1 Month | Resolution=15 Minutes
+2025-08-13 16:09:13.721318 - Ready to plot: 957 rows for CL=F | Period=1 Day | Resolution=1 Minute
+2025-08-13 16:09:13.729872 - System error: Invalid property specified for object of type plotly.graph_objs.Candlestick: 'hovertemplate'
+
+Did you mean "hovertext"?
+
+    Valid properties:
+        close
+            Sets the close values.
+        closesrc
+            Sets the source reference on Chart Studio Cloud for
+            `close`.
+        customdata
+            Assigns extra data each datum. This may be useful when
+            listening to hover, click and selection events. Note
+            that, "scatter" traces also appends customdata items in
+            the markers DOM elements
+        customdatasrc
+            Sets the source reference on Chart Studio Cloud for
+            `customdata`.
+        decreasing
+            :class:`plotly.graph_objects.candlestick.Decreasing`
+            instance or dict with compatible properties
+        high
+            Sets the high values.
+        highsrc
+            Sets the source reference on Chart Studio Cloud for
+            `high`.
+        hoverinfo
+            Determines which trace information appear on hover. If
+            `none` or `skip` are set, no information is displayed
+            upon hovering. But, if `none` is set, click and hover
+            events are still fired.
+        hoverinfosrc
+            Sets the source reference on Chart Studio Cloud for
+            `hoverinfo`.
+        hoverlabel
+            :class:`plotly.graph_objects.candlestick.Hoverlabel`
+            instance or dict with compatible properties
+        hovertext
+            Same as `text`.
+        hovertextsrc
+            Sets the source reference on Chart Studio Cloud for
+            `hovertext`.
+        ids
+            Assigns id labels to each datum. These ids for object
+            constancy of data points during animation. Should be an
+            array of strings, not numbers or any other type.
+        idssrc
+            Sets the source reference on Chart Studio Cloud for
+            `ids`.
+        increasing
+            :class:`plotly.graph_objects.candlestick.Increasing`
+            instance or dict with compatible properties
+        legend
+            Sets the reference to a legend to show this trace in.
+            References to these legends are "legend", "legend2",
+            "legend3", etc. Settings for these legends are set in
+            the layout, under `layout.legend`, `layout.legend2`,
+            etc.
+        legendgroup
+            Sets the legend group for this trace. Traces and shapes
+            part of the same legend group hide/show at the same
+            time when toggling legend items.
+        legendgrouptitle
+            :class:`plotly.graph_objects.candlestick.Legendgrouptit
+            le` instance or dict with compatible properties
+        legendrank
+            Sets the legend rank for this trace. Items and groups
+            with smaller ranks are presented on top/left side while
+            with "reversed" `legend.traceorder` they are on
+            bottom/right side. The default legendrank is 1000, so
+            that you can use ranks less than 1000 to place certain
+            items before all unranked items, and ranks greater than
+            1000 to go after all unranked items. When having
+            unranked or equal rank items shapes would be displayed
+            after traces i.e. according to their order in data and
+            layout.
+        legendwidth
+            Sets the width (in px or fraction) of the legend for
+            this trace.
+        line
+            :class:`plotly.graph_objects.candlestick.Line` instance
+            or dict with compatible properties
+        low
+            Sets the low values.
+        lowsrc
+            Sets the source reference on Chart Studio Cloud for
+            `low`.
+        meta
+            Assigns extra meta information associated with this
+            trace that can be used in various text attributes.
+            Attributes such as trace `name`, graph, axis and
+            colorbar `title.text`, annotation `text`
+            `rangeselector`, `updatemenues` and `sliders` `label`
+            text all support `meta`. To access the trace `meta`
+            values in an attribute in the same trace, simply use
+            `%{meta[i]}` where `i` is the index or key of the
+            `meta` item in question. To access trace `meta` in
+            layout attributes, use `%{data[n[.meta[i]}` where `i`
+            is the index or key of the `meta` and `n` is the trace
+            index.
+        metasrc
+            Sets the source reference on Chart Studio Cloud for
+            `meta`.
+        name
+            Sets the trace name. The trace name appears as the
+            legend item and on hover.
+        opacity
+            Sets the opacity of the trace.
+        open
+            Sets the open values.
+        opensrc
+            Sets the source reference on Chart Studio Cloud for
+            `open`.
+        selectedpoints
+            Array containing integer indices of selected points.
+            Has an effect only for traces that support selections.
+            Note that an empty array means an empty selection where
+            the `unselected` are turned on for all points, whereas,
+            any other non-array values means no selection all where
+            the `selected` and `unselected` styles have no effect.
+        showlegend
+            Determines whether or not an item corresponding to this
+            trace is shown in the legend.
+        stream
+            :class:`plotly.graph_objects.candlestick.Stream`
+            instance or dict with compatible properties
+        text
+            Sets hover text elements associated with each sample
+            point. If a single string, the same string appears over
+            all the data points. If an array of string, the items
+            are mapped in order to this trace's sample points.
+        textsrc
+            Sets the source reference on Chart Studio Cloud for
+            `text`.
+        uid
+            Assign an id to this trace, Use this to provide object
+            constancy between traces during animations and
+            transitions.
+        uirevision
+            Controls persistence of some user-driven changes to the
+            trace: `constraintrange` in `parcoords` traces, as well
+            as some `editable: true` modifications such as `name`
+            and `colorbar.title`. Defaults to `layout.uirevision`.
+            Note that other user-driven trace attribute changes are
+            controlled by `layout` attributes: `trace.visible` is
+            controlled by `layout.legend.uirevision`,
+            `selectedpoints` is controlled by
+            `layout.selectionrevision`, and `colorbar.(x|y)`
+            (accessible with `config: {editable: true}`) is
+            controlled by `layout.editrevision`. Trace changes are
+            tracked by `uid`, which only falls back on trace index
+            if no `uid` is provided. So if your app can add/remove
+            traces before the end of the `data` array, such that
+            the same trace has a different index, you can still
+            preserve user-driven changes if you give each trace a
+            `uid` that stays with it as it moves.
+        visible
+            Determines whether or not this trace is visible. If
+            "legendonly", the trace is not drawn, but can appear as
+            a legend item (provided that the legend itself is
+            visible).
+        whiskerwidth
+            Sets the width of the whiskers relative to the box'
+            width. For example, with 1, the whiskers are as wide as
+            the box(es).
+        x
+            Sets the x coordinates. If absent, linear coordinate
+            will be generated.
+        xaxis
+            Sets a reference between this trace's x coordinates and
+            a 2D cartesian x axis. If "x" (the default value), the
+            x coordinates refer to `layout.xaxis`. If "x2", the x
+            coordinates refer to `layout.xaxis2`, and so on.
+        xcalendar
+            Sets the calendar system to use with `x` date data.
+        xhoverformat
+            Sets the hover text formatting rulefor `x`  using d3
+            formatting mini-languages which are very similar to
+            those in Python. For numbers, see:
+            https://github.com/d3/d3-format/tree/v1.4.5#d3-format.
+            And for dates see: https://github.com/d3/d3-time-
+            format/tree/v2.2.3#locale_format. We add two items to
+            d3's date formatter: "%h" for half of the year as a
+            decimal number as well as "%{n}f" for fractional
+            seconds with n digits. For example, *2016-10-13
+            09:15:23.456* with tickformat "%H~%M~%S.%2f" would
+            display *09~15~23.46*By default the values are
+            formatted using `xaxis.hoverformat`.
+        xperiod
+            Only relevant when the axis `type` is "date". Sets the
+            period positioning in milliseconds or "M<n>" on the x
+            axis. Special values in the form of "M<n>" could be
+            used to declare the number of months. In this case `n`
+            must be a positive integer.
+        xperiod0
+            Only relevant when the axis `type` is "date". Sets the
+            base for period positioning in milliseconds or date
+            string on the x0 axis. When `x0period` is round number
+            of weeks, the `x0period0` by default would be on a
+            Sunday i.e. 2000-01-02, otherwise it would be at
+            2000-01-01.
+        xperiodalignment
+            Only relevant when the axis `type` is "date". Sets the
+            alignment of data points on the x axis.
+        xsrc
+            Sets the source reference on Chart Studio Cloud for
+            `x`.
+        yaxis
+            Sets a reference between this trace's y coordinates and
+            a 2D cartesian y axis. If "y" (the default value), the
+            y coordinates refer to `layout.yaxis`. If "y2", the y
+            coordinates refer to `layout.yaxis2`, and so on.
+        yhoverformat
+            Sets the hover text formatting rulefor `y`  using d3
+            formatting mini-languages which are very similar to
+            those in Python. For numbers, see:
+            https://github.com/d3/d3-format/tree/v1.4.5#d3-format.
+            And for dates see: https://github.com/d3/d3-time-
+            format/tree/v2.2.3#locale_format. We add two items to
+            d3's date formatter: "%h" for half of the year as a
+            decimal number as well as "%{n}f" for fractional
+            seconds with n digits. For example, *2016-10-13
+            09:15:23.456* with tickformat "%H~%M~%S.%2f" would
+            display *09~15~23.46*By default the values are
+            formatted using `yaxis.hoverformat`.
+        zorder
+            Sets the layer on which this trace is displayed,
+            relative to other SVG traces on the same subplot. SVG
+            traces with higher `zorder` appear in front of those
+            with lower `zorder`.
+        
+Did you mean "hovertext"?
+
+Bad property path:
+hovertemplate
+^^^^^^^^^^^^^
+2025-08-13 16:09:38.075312 - Ready to plot: 957 rows for CL=F | Period=1 Day | Resolution=1 Minute
+2025-08-13 16:09:38.113239 - System error: Invalid property specified for object of type plotly.graph_objs.Candlestick: 'hovertemplate'
+
+Did you mean "hovertext"?
+
+    Valid properties:
+        close
+            Sets the close values.
+        closesrc
+            Sets the source reference on Chart Studio Cloud for
+            `close`.
+        customdata
+            Assigns extra data each datum. This may be useful when
+            listening to hover, click and selection events. Note
+            that, "scatter" traces also appends customdata items in
+            the markers DOM elements
+        customdatasrc
+            Sets the source reference on Chart Studio Cloud for
+            `customdata`.
+        decreasing
+            :class:`plotly.graph_objects.candlestick.Decreasing`
+            instance or dict with compatible properties
+        high
+            Sets the high values.
+        highsrc
+            Sets the source reference on Chart Studio Cloud for
+            `high`.
+        hoverinfo
+            Determines which trace information appear on hover. If
+            `none` or `skip` are set, no information is displayed
+            upon hovering. But, if `none` is set, click and hover
+            events are still fired.
+        hoverinfosrc
+            Sets the source reference on Chart Studio Cloud for
+            `hoverinfo`.
+        hoverlabel
+            :class:`plotly.graph_objects.candlestick.Hoverlabel`
+            instance or dict with compatible properties
+        hovertext
+            Same as `text`.
+        hovertextsrc
+            Sets the source reference on Chart Studio Cloud for
+            `hovertext`.
+        ids
+            Assigns id labels to each datum. These ids for object
+            constancy of data points during animation. Should be an
+            array of strings, not numbers or any other type.
+        idssrc
+            Sets the source reference on Chart Studio Cloud for
+            `ids`.
+        increasing
+            :class:`plotly.graph_objects.candlestick.Increasing`
+            instance or dict with compatible properties
+        legend
+            Sets the reference to a legend to show this trace in.
+            References to these legends are "legend", "legend2",
+            "legend3", etc. Settings for these legends are set in
+            the layout, under `layout.legend`, `layout.legend2`,
+            etc.
+        legendgroup
+            Sets the legend group for this trace. Traces and shapes
+            part of the same legend group hide/show at the same
+            time when toggling legend items.
+        legendgrouptitle
+            :class:`plotly.graph_objects.candlestick.Legendgrouptit
+            le` instance or dict with compatible properties
+        legendrank
+            Sets the legend rank for this trace. Items and groups
+            with smaller ranks are presented on top/left side while
+            with "reversed" `legend.traceorder` they are on
+            bottom/right side. The default legendrank is 1000, so
+            that you can use ranks less than 1000 to place certain
+            items before all unranked items, and ranks greater than
+            1000 to go after all unranked items. When having
+            unranked or equal rank items shapes would be displayed
+            after traces i.e. according to their order in data and
+            layout.
+        legendwidth
+            Sets the width (in px or fraction) of the legend for
+            this trace.
+        line
+            :class:`plotly.graph_objects.candlestick.Line` instance
+            or dict with compatible properties
+        low
+            Sets the low values.
+        lowsrc
+            Sets the source reference on Chart Studio Cloud for
+            `low`.
+        meta
+            Assigns extra meta information associated with this
+            trace that can be used in various text attributes.
+            Attributes such as trace `name`, graph, axis and
+            colorbar `title.text`, annotation `text`
+            `rangeselector`, `updatemenues` and `sliders` `label`
+            text all support `meta`. To access the trace `meta`
+            values in an attribute in the same trace, simply use
+            `%{meta[i]}` where `i` is the index or key of the
+            `meta` item in question. To access trace `meta` in
+            layout attributes, use `%{data[n[.meta[i]}` where `i`
+            is the index or key of the `meta` and `n` is the trace
+            index.
+        metasrc
+            Sets the source reference on Chart Studio Cloud for
+            `meta`.
+        name
+            Sets the trace name. The trace name appears as the
+            legend item and on hover.
+        opacity
+            Sets the opacity of the trace.
+        open
+            Sets the open values.
+        opensrc
+            Sets the source reference on Chart Studio Cloud for
+            `open`.
+        selectedpoints
+            Array containing integer indices of selected points.
+            Has an effect only for traces that support selections.
+            Note that an empty array means an empty selection where
+            the `unselected` are turned on for all points, whereas,
+            any other non-array values means no selection all where
+            the `selected` and `unselected` styles have no effect.
+        showlegend
+            Determines whether or not an item corresponding to this
+            trace is shown in the legend.
+        stream
+            :class:`plotly.graph_objects.candlestick.Stream`
+            instance or dict with compatible properties
+        text
+            Sets hover text elements associated with each sample
+            point. If a single string, the same string appears over
+            all the data points. If an array of string, the items
+            are mapped in order to this trace's sample points.
+        textsrc
+            Sets the source reference on Chart Studio Cloud for
+            `text`.
+        uid
+            Assign an id to this trace, Use this to provide object
+            constancy between traces during animations and
+            transitions.
+        uirevision
+            Controls persistence of some user-driven changes to the
+            trace: `constraintrange` in `parcoords` traces, as well
+            as some `editable: true` modifications such as `name`
+            and `colorbar.title`. Defaults to `layout.uirevision`.
+            Note that other user-driven trace attribute changes are
+            controlled by `layout` attributes: `trace.visible` is
+            controlled by `layout.legend.uirevision`,
+            `selectedpoints` is controlled by
+            `layout.selectionrevision`, and `colorbar.(x|y)`
+            (accessible with `config: {editable: true}`) is
+            controlled by `layout.editrevision`. Trace changes are
+            tracked by `uid`, which only falls back on trace index
+            if no `uid` is provided. So if your app can add/remove
+            traces before the end of the `data` array, such that
+            the same trace has a different index, you can still
+            preserve user-driven changes if you give each trace a
+            `uid` that stays with it as it moves.
+        visible
+            Determines whether or not this trace is visible. If
+            "legendonly", the trace is not drawn, but can appear as
+            a legend item (provided that the legend itself is
+            visible).
+        whiskerwidth
+            Sets the width of the whiskers relative to the box'
+            width. For example, with 1, the whiskers are as wide as
+            the box(es).
+        x
+            Sets the x coordinates. If absent, linear coordinate
+            will be generated.
+        xaxis
+            Sets a reference between this trace's x coordinates and
+            a 2D cartesian x axis. If "x" (the default value), the
+            x coordinates refer to `layout.xaxis`. If "x2", the x
+            coordinates refer to `layout.xaxis2`, and so on.
+        xcalendar
+            Sets the calendar system to use with `x` date data.
+        xhoverformat
+            Sets the hover text formatting rulefor `x`  using d3
+            formatting mini-languages which are very similar to
+            those in Python. For numbers, see:
+            https://github.com/d3/d3-format/tree/v1.4.5#d3-format.
+            And for dates see: https://github.com/d3/d3-time-
+            format/tree/v2.2.3#locale_format. We add two items to
+            d3's date formatter: "%h" for half of the year as a
+            decimal number as well as "%{n}f" for fractional
+            seconds with n digits. For example, *2016-10-13
+            09:15:23.456* with tickformat "%H~%M~%S.%2f" would
+            display *09~15~23.46*By default the values are
+            formatted using `xaxis.hoverformat`.
+        xperiod
+            Only relevant when the axis `type` is "date". Sets the
+            period positioning in milliseconds or "M<n>" on the x
+            axis. Special values in the form of "M<n>" could be
+            used to declare the number of months. In this case `n`
+            must be a positive integer.
+        xperiod0
+            Only relevant when the axis `type` is "date". Sets the
+            base for period positioning in milliseconds or date
+            string on the x0 axis. When `x0period` is round number
+            of weeks, the `x0period0` by default would be on a
+            Sunday i.e. 2000-01-02, otherwise it would be at
+            2000-01-01.
+        xperiodalignment
+            Only relevant when the axis `type` is "date". Sets the
+            alignment of data points on the x axis.
+        xsrc
+            Sets the source reference on Chart Studio Cloud for
+            `x`.
+        yaxis
+            Sets a reference between this trace's y coordinates and
+            a 2D cartesian y axis. If "y" (the default value), the
+            y coordinates refer to `layout.yaxis`. If "y2", the y
+            coordinates refer to `layout.yaxis2`, and so on.
+        yhoverformat
+            Sets the hover text formatting rulefor `y`  using d3
+            formatting mini-languages which are very similar to
+            those in Python. For numbers, see:
+            https://github.com/d3/d3-format/tree/v1.4.5#d3-format.
+            And for dates see: https://github.com/d3/d3-time-
+            format/tree/v2.2.3#locale_format. We add two items to
+            d3's date formatter: "%h" for half of the year as a
+            decimal number as well as "%{n}f" for fractional
+            seconds with n digits. For example, *2016-10-13
+            09:15:23.456* with tickformat "%H~%M~%S.%2f" would
+            display *09~15~23.46*By default the values are
+            formatted using `yaxis.hoverformat`.
+        zorder
+            Sets the layer on which this trace is displayed,
+            relative to other SVG traces on the same subplot. SVG
+            traces with higher `zorder` appear in front of those
+            with lower `zorder`.
+        
+Did you mean "hovertext"?
+
+Bad property path:
+hovertemplate
+^^^^^^^^^^^^^
+2025-08-13 16:11:28.927446 - Ready to plot: 957 rows for CL=F | Period=1 Day | Resolution=1 Minute
+2025-08-13 16:11:28.936236 - System error: Invalid property specified for object of type plotly.graph_objs.Candlestick: 'hovertemplate'
+
+Did you mean "hovertext"?
+
+    Valid properties:
+        close
+            Sets the close values.
+        closesrc
+            Sets the source reference on Chart Studio Cloud for
+            `close`.
+        customdata
+            Assigns extra data each datum. This may be useful when
+            listening to hover, click and selection events. Note
+            that, "scatter" traces also appends customdata items in
+            the markers DOM elements
+        customdatasrc
+            Sets the source reference on Chart Studio Cloud for
+            `customdata`.
+        decreasing
+            :class:`plotly.graph_objects.candlestick.Decreasing`
+            instance or dict with compatible properties
+        high
+            Sets the high values.
+        highsrc
+            Sets the source reference on Chart Studio Cloud for
+            `high`.
+        hoverinfo
+            Determines which trace information appear on hover. If
+            `none` or `skip` are set, no information is displayed
+            upon hovering. But, if `none` is set, click and hover
+            events are still fired.
+        hoverinfosrc
+            Sets the source reference on Chart Studio Cloud for
+            `hoverinfo`.
+        hoverlabel
+            :class:`plotly.graph_objects.candlestick.Hoverlabel`
+            instance or dict with compatible properties
+        hovertext
+            Same as `text`.
+        hovertextsrc
+            Sets the source reference on Chart Studio Cloud for
+            `hovertext`.
+        ids
+            Assigns id labels to each datum. These ids for object
+            constancy of data points during animation. Should be an
+            array of strings, not numbers or any other type.
+        idssrc
+            Sets the source reference on Chart Studio Cloud for
+            `ids`.
+        increasing
+            :class:`plotly.graph_objects.candlestick.Increasing`
+            instance or dict with compatible properties
+        legend
+            Sets the reference to a legend to show this trace in.
+            References to these legends are "legend", "legend2",
+            "legend3", etc. Settings for these legends are set in
+            the layout, under `layout.legend`, `layout.legend2`,
+            etc.
+        legendgroup
+            Sets the legend group for this trace. Traces and shapes
+            part of the same legend group hide/show at the same
+            time when toggling legend items.
+        legendgrouptitle
+            :class:`plotly.graph_objects.candlestick.Legendgrouptit
+            le` instance or dict with compatible properties
+        legendrank
+            Sets the legend rank for this trace. Items and groups
+            with smaller ranks are presented on top/left side while
+            with "reversed" `legend.traceorder` they are on
+            bottom/right side. The default legendrank is 1000, so
+            that you can use ranks less than 1000 to place certain
+            items before all unranked items, and ranks greater than
+            1000 to go after all unranked items. When having
+            unranked or equal rank items shapes would be displayed
+            after traces i.e. according to their order in data and
+            layout.
+        legendwidth
+            Sets the width (in px or fraction) of the legend for
+            this trace.
+        line
+            :class:`plotly.graph_objects.candlestick.Line` instance
+            or dict with compatible properties
+        low
+            Sets the low values.
+        lowsrc
+            Sets the source reference on Chart Studio Cloud for
+            `low`.
+        meta
+            Assigns extra meta information associated with this
+            trace that can be used in various text attributes.
+            Attributes such as trace `name`, graph, axis and
+            colorbar `title.text`, annotation `text`
+            `rangeselector`, `updatemenues` and `sliders` `label`
+            text all support `meta`. To access the trace `meta`
+            values in an attribute in the same trace, simply use
+            `%{meta[i]}` where `i` is the index or key of the
+            `meta` item in question. To access trace `meta` in
+            layout attributes, use `%{data[n[.meta[i]}` where `i`
+            is the index or key of the `meta` and `n` is the trace
+            index.
+        metasrc
+            Sets the source reference on Chart Studio Cloud for
+            `meta`.
+        name
+            Sets the trace name. The trace name appears as the
+            legend item and on hover.
+        opacity
+            Sets the opacity of the trace.
+        open
+            Sets the open values.
+        opensrc
+            Sets the source reference on Chart Studio Cloud for
+            `open`.
+        selectedpoints
+            Array containing integer indices of selected points.
+            Has an effect only for traces that support selections.
+            Note that an empty array means an empty selection where
+            the `unselected` are turned on for all points, whereas,
+            any other non-array values means no selection all where
+            the `selected` and `unselected` styles have no effect.
+        showlegend
+            Determines whether or not an item corresponding to this
+            trace is shown in the legend.
+        stream
+            :class:`plotly.graph_objects.candlestick.Stream`
+            instance or dict with compatible properties
+        text
+            Sets hover text elements associated with each sample
+            point. If a single string, the same string appears over
+            all the data points. If an array of string, the items
+            are mapped in order to this trace's sample points.
+        textsrc
+            Sets the source reference on Chart Studio Cloud for
+            `text`.
+        uid
+            Assign an id to this trace, Use this to provide object
+            constancy between traces during animations and
+            transitions.
+        uirevision
+            Controls persistence of some user-driven changes to the
+            trace: `constraintrange` in `parcoords` traces, as well
+            as some `editable: true` modifications such as `name`
+            and `colorbar.title`. Defaults to `layout.uirevision`.
+            Note that other user-driven trace attribute changes are
+            controlled by `layout` attributes: `trace.visible` is
+            controlled by `layout.legend.uirevision`,
+            `selectedpoints` is controlled by
+            `layout.selectionrevision`, and `colorbar.(x|y)`
+            (accessible with `config: {editable: true}`) is
+            controlled by `layout.editrevision`. Trace changes are
+            tracked by `uid`, which only falls back on trace index
+            if no `uid` is provided. So if your app can add/remove
+            traces before the end of the `data` array, such that
+            the same trace has a different index, you can still
+            preserve user-driven changes if you give each trace a
+            `uid` that stays with it as it moves.
+        visible
+            Determines whether or not this trace is visible. If
+            "legendonly", the trace is not drawn, but can appear as
+            a legend item (provided that the legend itself is
+            visible).
+        whiskerwidth
+            Sets the width of the whiskers relative to the box'
+            width. For example, with 1, the whiskers are as wide as
+            the box(es).
+        x
+            Sets the x coordinates. If absent, linear coordinate
+            will be generated.
+        xaxis
+            Sets a reference between this trace's x coordinates and
+            a 2D cartesian x axis. If "x" (the default value), the
+            x coordinates refer to `layout.xaxis`. If "x2", the x
+            coordinates refer to `layout.xaxis2`, and so on.
+        xcalendar
+            Sets the calendar system to use with `x` date data.
+        xhoverformat
+            Sets the hover text formatting rulefor `x`  using d3
+            formatting mini-languages which are very similar to
+            those in Python. For numbers, see:
+            https://github.com/d3/d3-format/tree/v1.4.5#d3-format.
+            And for dates see: https://github.com/d3/d3-time-
+            format/tree/v2.2.3#locale_format. We add two items to
+            d3's date formatter: "%h" for half of the year as a
+            decimal number as well as "%{n}f" for fractional
+            seconds with n digits. For example, *2016-10-13
+            09:15:23.456* with tickformat "%H~%M~%S.%2f" would
+            display *09~15~23.46*By default the values are
+            formatted using `xaxis.hoverformat`.
+        xperiod
+            Only relevant when the axis `type` is "date". Sets the
+            period positioning in milliseconds or "M<n>" on the x
+            axis. Special values in the form of "M<n>" could be
+            used to declare the number of months. In this case `n`
+            must be a positive integer.
+        xperiod0
+            Only relevant when the axis `type` is "date". Sets the
+            base for period positioning in milliseconds or date
+            string on the x0 axis. When `x0period` is round number
+            of weeks, the `x0period0` by default would be on a
+            Sunday i.e. 2000-01-02, otherwise it would be at
+            2000-01-01.
+        xperiodalignment
+            Only relevant when the axis `type` is "date". Sets the
+            alignment of data points on the x axis.
+        xsrc
+            Sets the source reference on Chart Studio Cloud for
+            `x`.
+        yaxis
+            Sets a reference between this trace's y coordinates and
+            a 2D cartesian y axis. If "y" (the default value), the
+            y coordinates refer to `layout.yaxis`. If "y2", the y
+            coordinates refer to `layout.yaxis2`, and so on.
+        yhoverformat
+            Sets the hover text formatting rulefor `y`  using d3
+            formatting mini-languages which are very similar to
+            those in Python. For numbers, see:
+            https://github.com/d3/d3-format/tree/v1.4.5#d3-format.
+            And for dates see: https://github.com/d3/d3-time-
+            format/tree/v2.2.3#locale_format. We add two items to
+            d3's date formatter: "%h" for half of the year as a
+            decimal number as well as "%{n}f" for fractional
+            seconds with n digits. For example, *2016-10-13
+            09:15:23.456* with tickformat "%H~%M~%S.%2f" would
+            display *09~15~23.46*By default the values are
+            formatted using `yaxis.hoverformat`.
+        zorder
+            Sets the layer on which this trace is displayed,
+            relative to other SVG traces on the same subplot. SVG
+            traces with higher `zorder` appear in front of those
+            with lower `zorder`.
+        
+Did you mean "hovertext"?
+
+Bad property path:
+hovertemplate
+^^^^^^^^^^^^^
+2025-08-13 16:11:33.403006 - Ready to plot: 41 rows for MSFT | Period=1 Day | Resolution=1 Minute
+2025-08-13 16:11:33.412002 - System error: Invalid property specified for object of type plotly.graph_objs.Candlestick: 'hovertemplate'
+
+Did you mean "hovertext"?
+
+    Valid properties:
+        close
+            Sets the close values.
+        closesrc
+            Sets the source reference on Chart Studio Cloud for
+            `close`.
+        customdata
+            Assigns extra data each datum. This may be useful when
+            listening to hover, click and selection events. Note
+            that, "scatter" traces also appends customdata items in
+            the markers DOM elements
+        customdatasrc
+            Sets the source reference on Chart Studio Cloud for
+            `customdata`.
+        decreasing
+            :class:`plotly.graph_objects.candlestick.Decreasing`
+            instance or dict with compatible properties
+        high
+            Sets the high values.
+        highsrc
+            Sets the source reference on Chart Studio Cloud for
+            `high`.
+        hoverinfo
+            Determines which trace information appear on hover. If
+            `none` or `skip` are set, no information is displayed
+            upon hovering. But, if `none` is set, click and hover
+            events are still fired.
+        hoverinfosrc
+            Sets the source reference on Chart Studio Cloud for
+            `hoverinfo`.
+        hoverlabel
+            :class:`plotly.graph_objects.candlestick.Hoverlabel`
+            instance or dict with compatible properties
+        hovertext
+            Same as `text`.
+        hovertextsrc
+            Sets the source reference on Chart Studio Cloud for
+            `hovertext`.
+        ids
+            Assigns id labels to each datum. These ids for object
+            constancy of data points during animation. Should be an
+            array of strings, not numbers or any other type.
+        idssrc
+            Sets the source reference on Chart Studio Cloud for
+            `ids`.
+        increasing
+            :class:`plotly.graph_objects.candlestick.Increasing`
+            instance or dict with compatible properties
+        legend
+            Sets the reference to a legend to show this trace in.
+            References to these legends are "legend", "legend2",
+            "legend3", etc. Settings for these legends are set in
+            the layout, under `layout.legend`, `layout.legend2`,
+            etc.
+        legendgroup
+            Sets the legend group for this trace. Traces and shapes
+            part of the same legend group hide/show at the same
+            time when toggling legend items.
+        legendgrouptitle
+            :class:`plotly.graph_objects.candlestick.Legendgrouptit
+            le` instance or dict with compatible properties
+        legendrank
+            Sets the legend rank for this trace. Items and groups
+            with smaller ranks are presented on top/left side while
+            with "reversed" `legend.traceorder` they are on
+            bottom/right side. The default legendrank is 1000, so
+            that you can use ranks less than 1000 to place certain
+            items before all unranked items, and ranks greater than
+            1000 to go after all unranked items. When having
+            unranked or equal rank items shapes would be displayed
+            after traces i.e. according to their order in data and
+            layout.
+        legendwidth
+            Sets the width (in px or fraction) of the legend for
+            this trace.
+        line
+            :class:`plotly.graph_objects.candlestick.Line` instance
+            or dict with compatible properties
+        low
+            Sets the low values.
+        lowsrc
+            Sets the source reference on Chart Studio Cloud for
+            `low`.
+        meta
+            Assigns extra meta information associated with this
+            trace that can be used in various text attributes.
+            Attributes such as trace `name`, graph, axis and
+            colorbar `title.text`, annotation `text`
+            `rangeselector`, `updatemenues` and `sliders` `label`
+            text all support `meta`. To access the trace `meta`
+            values in an attribute in the same trace, simply use
+            `%{meta[i]}` where `i` is the index or key of the
+            `meta` item in question. To access trace `meta` in
+            layout attributes, use `%{data[n[.meta[i]}` where `i`
+            is the index or key of the `meta` and `n` is the trace
+            index.
+        metasrc
+            Sets the source reference on Chart Studio Cloud for
+            `meta`.
+        name
+            Sets the trace name. The trace name appears as the
+            legend item and on hover.
+        opacity
+            Sets the opacity of the trace.
+        open
+            Sets the open values.
+        opensrc
+            Sets the source reference on Chart Studio Cloud for
+            `open`.
+        selectedpoints
+            Array containing integer indices of selected points.
+            Has an effect only for traces that support selections.
+            Note that an empty array means an empty selection where
+            the `unselected` are turned on for all points, whereas,
+            any other non-array values means no selection all where
+            the `selected` and `unselected` styles have no effect.
+        showlegend
+            Determines whether or not an item corresponding to this
+            trace is shown in the legend.
+        stream
+            :class:`plotly.graph_objects.candlestick.Stream`
+            instance or dict with compatible properties
+        text
+            Sets hover text elements associated with each sample
+            point. If a single string, the same string appears over
+            all the data points. If an array of string, the items
+            are mapped in order to this trace's sample points.
+        textsrc
+            Sets the source reference on Chart Studio Cloud for
+            `text`.
+        uid
+            Assign an id to this trace, Use this to provide object
+            constancy between traces during animations and
+            transitions.
+        uirevision
+            Controls persistence of some user-driven changes to the
+            trace: `constraintrange` in `parcoords` traces, as well
+            as some `editable: true` modifications such as `name`
+            and `colorbar.title`. Defaults to `layout.uirevision`.
+            Note that other user-driven trace attribute changes are
+            controlled by `layout` attributes: `trace.visible` is
+            controlled by `layout.legend.uirevision`,
+            `selectedpoints` is controlled by
+            `layout.selectionrevision`, and `colorbar.(x|y)`
+            (accessible with `config: {editable: true}`) is
+            controlled by `layout.editrevision`. Trace changes are
+            tracked by `uid`, which only falls back on trace index
+            if no `uid` is provided. So if your app can add/remove
+            traces before the end of the `data` array, such that
+            the same trace has a different index, you can still
+            preserve user-driven changes if you give each trace a
+            `uid` that stays with it as it moves.
+        visible
+            Determines whether or not this trace is visible. If
+            "legendonly", the trace is not drawn, but can appear as
+            a legend item (provided that the legend itself is
+            visible).
+        whiskerwidth
+            Sets the width of the whiskers relative to the box'
+            width. For example, with 1, the whiskers are as wide as
+            the box(es).
+        x
+            Sets the x coordinates. If absent, linear coordinate
+            will be generated.
+        xaxis
+            Sets a reference between this trace's x coordinates and
+            a 2D cartesian x axis. If "x" (the default value), the
+            x coordinates refer to `layout.xaxis`. If "x2", the x
+            coordinates refer to `layout.xaxis2`, and so on.
+        xcalendar
+            Sets the calendar system to use with `x` date data.
+        xhoverformat
+            Sets the hover text formatting rulefor `x`  using d3
+            formatting mini-languages which are very similar to
+            those in Python. For numbers, see:
+            https://github.com/d3/d3-format/tree/v1.4.5#d3-format.
+            And for dates see: https://github.com/d3/d3-time-
+            format/tree/v2.2.3#locale_format. We add two items to
+            d3's date formatter: "%h" for half of the year as a
+            decimal number as well as "%{n}f" for fractional
+            seconds with n digits. For example, *2016-10-13
+            09:15:23.456* with tickformat "%H~%M~%S.%2f" would
+            display *09~15~23.46*By default the values are
+            formatted using `xaxis.hoverformat`.
+        xperiod
+            Only relevant when the axis `type` is "date". Sets the
+            period positioning in milliseconds or "M<n>" on the x
+            axis. Special values in the form of "M<n>" could be
+            used to declare the number of months. In this case `n`
+            must be a positive integer.
+        xperiod0
+            Only relevant when the axis `type` is "date". Sets the
+            base for period positioning in milliseconds or date
+            string on the x0 axis. When `x0period` is round number
+            of weeks, the `x0period0` by default would be on a
+            Sunday i.e. 2000-01-02, otherwise it would be at
+            2000-01-01.
+        xperiodalignment
+            Only relevant when the axis `type` is "date". Sets the
+            alignment of data points on the x axis.
+        xsrc
+            Sets the source reference on Chart Studio Cloud for
+            `x`.
+        yaxis
+            Sets a reference between this trace's y coordinates and
+            a 2D cartesian y axis. If "y" (the default value), the
+            y coordinates refer to `layout.yaxis`. If "y2", the y
+            coordinates refer to `layout.yaxis2`, and so on.
+        yhoverformat
+            Sets the hover text formatting rulefor `y`  using d3
+            formatting mini-languages which are very similar to
+            those in Python. For numbers, see:
+            https://github.com/d3/d3-format/tree/v1.4.5#d3-format.
+            And for dates see: https://github.com/d3/d3-time-
+            format/tree/v2.2.3#locale_format. We add two items to
+            d3's date formatter: "%h" for half of the year as a
+            decimal number as well as "%{n}f" for fractional
+            seconds with n digits. For example, *2016-10-13
+            09:15:23.456* with tickformat "%H~%M~%S.%2f" would
+            display *09~15~23.46*By default the values are
+            formatted using `yaxis.hoverformat`.
+        zorder
+            Sets the layer on which this trace is displayed,
+            relative to other SVG traces on the same subplot. SVG
+            traces with higher `zorder` appear in front of those
+            with lower `zorder`.
+        
+Did you mean "hovertext"?
+
+Bad property path:
+hovertemplate
+^^^^^^^^^^^^^
+2025-08-13 16:11:36.528604 - Ready to plot: 41 rows for MSFT | Period=1 Day | Resolution=1 Minute
+2025-08-13 16:11:36.536425 - System error: Invalid property specified for object of type plotly.graph_objs.Candlestick: 'hovertemplate'
+
+Did you mean "hovertext"?
+
+    Valid properties:
+        close
+            Sets the close values.
+        closesrc
+            Sets the source reference on Chart Studio Cloud for
+            `close`.
+        customdata
+            Assigns extra data each datum. This may be useful when
+            listening to hover, click and selection events. Note
+            that, "scatter" traces also appends customdata items in
+            the markers DOM elements
+        customdatasrc
+            Sets the source reference on Chart Studio Cloud for
+            `customdata`.
+        decreasing
+            :class:`plotly.graph_objects.candlestick.Decreasing`
+            instance or dict with compatible properties
+        high
+            Sets the high values.
+        highsrc
+            Sets the source reference on Chart Studio Cloud for
+            `high`.
+        hoverinfo
+            Determines which trace information appear on hover. If
+            `none` or `skip` are set, no information is displayed
+            upon hovering. But, if `none` is set, click and hover
+            events are still fired.
+        hoverinfosrc
+            Sets the source reference on Chart Studio Cloud for
+            `hoverinfo`.
+        hoverlabel
+            :class:`plotly.graph_objects.candlestick.Hoverlabel`
+            instance or dict with compatible properties
+        hovertext
+            Same as `text`.
+        hovertextsrc
+            Sets the source reference on Chart Studio Cloud for
+            `hovertext`.
+        ids
+            Assigns id labels to each datum. These ids for object
+            constancy of data points during animation. Should be an
+            array of strings, not numbers or any other type.
+        idssrc
+            Sets the source reference on Chart Studio Cloud for
+            `ids`.
+        increasing
+            :class:`plotly.graph_objects.candlestick.Increasing`
+            instance or dict with compatible properties
+        legend
+            Sets the reference to a legend to show this trace in.
+            References to these legends are "legend", "legend2",
+            "legend3", etc. Settings for these legends are set in
+            the layout, under `layout.legend`, `layout.legend2`,
+            etc.
+        legendgroup
+            Sets the legend group for this trace. Traces and shapes
+            part of the same legend group hide/show at the same
+            time when toggling legend items.
+        legendgrouptitle
+            :class:`plotly.graph_objects.candlestick.Legendgrouptit
+            le` instance or dict with compatible properties
+        legendrank
+            Sets the legend rank for this trace. Items and groups
+            with smaller ranks are presented on top/left side while
+            with "reversed" `legend.traceorder` they are on
+            bottom/right side. The default legendrank is 1000, so
+            that you can use ranks less than 1000 to place certain
+            items before all unranked items, and ranks greater than
+            1000 to go after all unranked items. When having
+            unranked or equal rank items shapes would be displayed
+            after traces i.e. according to their order in data and
+            layout.
+        legendwidth
+            Sets the width (in px or fraction) of the legend for
+            this trace.
+        line
+            :class:`plotly.graph_objects.candlestick.Line` instance
+            or dict with compatible properties
+        low
+            Sets the low values.
+        lowsrc
+            Sets the source reference on Chart Studio Cloud for
+            `low`.
+        meta
+            Assigns extra meta information associated with this
+            trace that can be used in various text attributes.
+            Attributes such as trace `name`, graph, axis and
+            colorbar `title.text`, annotation `text`
+            `rangeselector`, `updatemenues` and `sliders` `label`
+            text all support `meta`. To access the trace `meta`
+            values in an attribute in the same trace, simply use
+            `%{meta[i]}` where `i` is the index or key of the
+            `meta` item in question. To access trace `meta` in
+            layout attributes, use `%{data[n[.meta[i]}` where `i`
+            is the index or key of the `meta` and `n` is the trace
+            index.
+        metasrc
+            Sets the source reference on Chart Studio Cloud for
+            `meta`.
+        name
+            Sets the trace name. The trace name appears as the
+            legend item and on hover.
+        opacity
+            Sets the opacity of the trace.
+        open
+            Sets the open values.
+        opensrc
+            Sets the source reference on Chart Studio Cloud for
+            `open`.
+        selectedpoints
+            Array containing integer indices of selected points.
+            Has an effect only for traces that support selections.
+            Note that an empty array means an empty selection where
+            the `unselected` are turned on for all points, whereas,
+            any other non-array values means no selection all where
+            the `selected` and `unselected` styles have no effect.
+        showlegend
+            Determines whether or not an item corresponding to this
+            trace is shown in the legend.
+        stream
+            :class:`plotly.graph_objects.candlestick.Stream`
+            instance or dict with compatible properties
+        text
+            Sets hover text elements associated with each sample
+            point. If a single string, the same string appears over
+            all the data points. If an array of string, the items
+            are mapped in order to this trace's sample points.
+        textsrc
+            Sets the source reference on Chart Studio Cloud for
+            `text`.
+        uid
+            Assign an id to this trace, Use this to provide object
+            constancy between traces during animations and
+            transitions.
+        uirevision
+            Controls persistence of some user-driven changes to the
+            trace: `constraintrange` in `parcoords` traces, as well
+            as some `editable: true` modifications such as `name`
+            and `colorbar.title`. Defaults to `layout.uirevision`.
+            Note that other user-driven trace attribute changes are
+            controlled by `layout` attributes: `trace.visible` is
+            controlled by `layout.legend.uirevision`,
+            `selectedpoints` is controlled by
+            `layout.selectionrevision`, and `colorbar.(x|y)`
+            (accessible with `config: {editable: true}`) is
+            controlled by `layout.editrevision`. Trace changes are
+            tracked by `uid`, which only falls back on trace index
+            if no `uid` is provided. So if your app can add/remove
+            traces before the end of the `data` array, such that
+            the same trace has a different index, you can still
+            preserve user-driven changes if you give each trace a
+            `uid` that stays with it as it moves.
+        visible
+            Determines whether or not this trace is visible. If
+            "legendonly", the trace is not drawn, but can appear as
+            a legend item (provided that the legend itself is
+            visible).
+        whiskerwidth
+            Sets the width of the whiskers relative to the box'
+            width. For example, with 1, the whiskers are as wide as
+            the box(es).
+        x
+            Sets the x coordinates. If absent, linear coordinate
+            will be generated.
+        xaxis
+            Sets a reference between this trace's x coordinates and
+            a 2D cartesian x axis. If "x" (the default value), the
+            x coordinates refer to `layout.xaxis`. If "x2", the x
+            coordinates refer to `layout.xaxis2`, and so on.
+        xcalendar
+            Sets the calendar system to use with `x` date data.
+        xhoverformat
+            Sets the hover text formatting rulefor `x`  using d3
+            formatting mini-languages which are very similar to
+            those in Python. For numbers, see:
+            https://github.com/d3/d3-format/tree/v1.4.5#d3-format.
+            And for dates see: https://github.com/d3/d3-time-
+            format/tree/v2.2.3#locale_format. We add two items to
+            d3's date formatter: "%h" for half of the year as a
+            decimal number as well as "%{n}f" for fractional
+            seconds with n digits. For example, *2016-10-13
+            09:15:23.456* with tickformat "%H~%M~%S.%2f" would
+            display *09~15~23.46*By default the values are
+            formatted using `xaxis.hoverformat`.
+        xperiod
+            Only relevant when the axis `type` is "date". Sets the
+            period positioning in milliseconds or "M<n>" on the x
+            axis. Special values in the form of "M<n>" could be
+            used to declare the number of months. In this case `n`
+            must be a positive integer.
+        xperiod0
+            Only relevant when the axis `type` is "date". Sets the
+            base for period positioning in milliseconds or date
+            string on the x0 axis. When `x0period` is round number
+            of weeks, the `x0period0` by default would be on a
+            Sunday i.e. 2000-01-02, otherwise it would be at
+            2000-01-01.
+        xperiodalignment
+            Only relevant when the axis `type` is "date". Sets the
+            alignment of data points on the x axis.
+        xsrc
+            Sets the source reference on Chart Studio Cloud for
+            `x`.
+        yaxis
+            Sets a reference between this trace's y coordinates and
+            a 2D cartesian y axis. If "y" (the default value), the
+            y coordinates refer to `layout.yaxis`. If "y2", the y
+            coordinates refer to `layout.yaxis2`, and so on.
+        yhoverformat
+            Sets the hover text formatting rulefor `y`  using d3
+            formatting mini-languages which are very similar to
+            those in Python. For numbers, see:
+            https://github.com/d3/d3-format/tree/v1.4.5#d3-format.
+            And for dates see: https://github.com/d3/d3-time-
+            format/tree/v2.2.3#locale_format. We add two items to
+            d3's date formatter: "%h" for half of the year as a
+            decimal number as well as "%{n}f" for fractional
+            seconds with n digits. For example, *2016-10-13
+            09:15:23.456* with tickformat "%H~%M~%S.%2f" would
+            display *09~15~23.46*By default the values are
+            formatted using `yaxis.hoverformat`.
+        zorder
+            Sets the layer on which this trace is displayed,
+            relative to other SVG traces on the same subplot. SVG
+            traces with higher `zorder` appear in front of those
+            with lower `zorder`.
+        
+Did you mean "hovertext"?
+
+Bad property path:
+hovertemplate
+^^^^^^^^^^^^^
+2025-08-13 16:11:38.255466 - Ready to plot: 1 rows for MSFT | Period=1 Day | Resolution=1 Hour
+2025-08-13 16:11:38.263181 - System error: Invalid property specified for object of type plotly.graph_objs.Candlestick: 'hovertemplate'
+
+Did you mean "hovertext"?
+
+    Valid properties:
+        close
+            Sets the close values.
+        closesrc
+            Sets the source reference on Chart Studio Cloud for
+            `close`.
+        customdata
+            Assigns extra data each datum. This may be useful when
+            listening to hover, click and selection events. Note
+            that, "scatter" traces also appends customdata items in
+            the markers DOM elements
+        customdatasrc
+            Sets the source reference on Chart Studio Cloud for
+            `customdata`.
+        decreasing
+            :class:`plotly.graph_objects.candlestick.Decreasing`
+            instance or dict with compatible properties
+        high
+            Sets the high values.
+        highsrc
+            Sets the source reference on Chart Studio Cloud for
+            `high`.
+        hoverinfo
+            Determines which trace information appear on hover. If
+            `none` or `skip` are set, no information is displayed
+            upon hovering. But, if `none` is set, click and hover
+            events are still fired.
+        hoverinfosrc
+            Sets the source reference on Chart Studio Cloud for
+            `hoverinfo`.
+        hoverlabel
+            :class:`plotly.graph_objects.candlestick.Hoverlabel`
+            instance or dict with compatible properties
+        hovertext
+            Same as `text`.
+        hovertextsrc
+            Sets the source reference on Chart Studio Cloud for
+            `hovertext`.
+        ids
+            Assigns id labels to each datum. These ids for object
+            constancy of data points during animation. Should be an
+            array of strings, not numbers or any other type.
+        idssrc
+            Sets the source reference on Chart Studio Cloud for
+            `ids`.
+        increasing
+            :class:`plotly.graph_objects.candlestick.Increasing`
+            instance or dict with compatible properties
+        legend
+            Sets the reference to a legend to show this trace in.
+            References to these legends are "legend", "legend2",
+            "legend3", etc. Settings for these legends are set in
+            the layout, under `layout.legend`, `layout.legend2`,
+            etc.
+        legendgroup
+            Sets the legend group for this trace. Traces and shapes
+            part of the same legend group hide/show at the same
+            time when toggling legend items.
+        legendgrouptitle
+            :class:`plotly.graph_objects.candlestick.Legendgrouptit
+            le` instance or dict with compatible properties
+        legendrank
+            Sets the legend rank for this trace. Items and groups
+            with smaller ranks are presented on top/left side while
+            with "reversed" `legend.traceorder` they are on
+            bottom/right side. The default legendrank is 1000, so
+            that you can use ranks less than 1000 to place certain
+            items before all unranked items, and ranks greater than
+            1000 to go after all unranked items. When having
+            unranked or equal rank items shapes would be displayed
+            after traces i.e. according to their order in data and
+            layout.
+        legendwidth
+            Sets the width (in px or fraction) of the legend for
+            this trace.
+        line
+            :class:`plotly.graph_objects.candlestick.Line` instance
+            or dict with compatible properties
+        low
+            Sets the low values.
+        lowsrc
+            Sets the source reference on Chart Studio Cloud for
+            `low`.
+        meta
+            Assigns extra meta information associated with this
+            trace that can be used in various text attributes.
+            Attributes such as trace `name`, graph, axis and
+            colorbar `title.text`, annotation `text`
+            `rangeselector`, `updatemenues` and `sliders` `label`
+            text all support `meta`. To access the trace `meta`
+            values in an attribute in the same trace, simply use
+            `%{meta[i]}` where `i` is the index or key of the
+            `meta` item in question. To access trace `meta` in
+            layout attributes, use `%{data[n[.meta[i]}` where `i`
+            is the index or key of the `meta` and `n` is the trace
+            index.
+        metasrc
+            Sets the source reference on Chart Studio Cloud for
+            `meta`.
+        name
+            Sets the trace name. The trace name appears as the
+            legend item and on hover.
+        opacity
+            Sets the opacity of the trace.
+        open
+            Sets the open values.
+        opensrc
+            Sets the source reference on Chart Studio Cloud for
+            `open`.
+        selectedpoints
+            Array containing integer indices of selected points.
+            Has an effect only for traces that support selections.
+            Note that an empty array means an empty selection where
+            the `unselected` are turned on for all points, whereas,
+            any other non-array values means no selection all where
+            the `selected` and `unselected` styles have no effect.
+        showlegend
+            Determines whether or not an item corresponding to this
+            trace is shown in the legend.
+        stream
+            :class:`plotly.graph_objects.candlestick.Stream`
+            instance or dict with compatible properties
+        text
+            Sets hover text elements associated with each sample
+            point. If a single string, the same string appears over
+            all the data points. If an array of string, the items
+            are mapped in order to this trace's sample points.
+        textsrc
+            Sets the source reference on Chart Studio Cloud for
+            `text`.
+        uid
+            Assign an id to this trace, Use this to provide object
+            constancy between traces during animations and
+            transitions.
+        uirevision
+            Controls persistence of some user-driven changes to the
+            trace: `constraintrange` in `parcoords` traces, as well
+            as some `editable: true` modifications such as `name`
+            and `colorbar.title`. Defaults to `layout.uirevision`.
+            Note that other user-driven trace attribute changes are
+            controlled by `layout` attributes: `trace.visible` is
+            controlled by `layout.legend.uirevision`,
+            `selectedpoints` is controlled by
+            `layout.selectionrevision`, and `colorbar.(x|y)`
+            (accessible with `config: {editable: true}`) is
+            controlled by `layout.editrevision`. Trace changes are
+            tracked by `uid`, which only falls back on trace index
+            if no `uid` is provided. So if your app can add/remove
+            traces before the end of the `data` array, such that
+            the same trace has a different index, you can still
+            preserve user-driven changes if you give each trace a
+            `uid` that stays with it as it moves.
+        visible
+            Determines whether or not this trace is visible. If
+            "legendonly", the trace is not drawn, but can appear as
+            a legend item (provided that the legend itself is
+            visible).
+        whiskerwidth
+            Sets the width of the whiskers relative to the box'
+            width. For example, with 1, the whiskers are as wide as
+            the box(es).
+        x
+            Sets the x coordinates. If absent, linear coordinate
+            will be generated.
+        xaxis
+            Sets a reference between this trace's x coordinates and
+            a 2D cartesian x axis. If "x" (the default value), the
+            x coordinates refer to `layout.xaxis`. If "x2", the x
+            coordinates refer to `layout.xaxis2`, and so on.
+        xcalendar
+            Sets the calendar system to use with `x` date data.
+        xhoverformat
+            Sets the hover text formatting rulefor `x`  using d3
+            formatting mini-languages which are very similar to
+            those in Python. For numbers, see:
+            https://github.com/d3/d3-format/tree/v1.4.5#d3-format.
+            And for dates see: https://github.com/d3/d3-time-
+            format/tree/v2.2.3#locale_format. We add two items to
+            d3's date formatter: "%h" for half of the year as a
+            decimal number as well as "%{n}f" for fractional
+            seconds with n digits. For example, *2016-10-13
+            09:15:23.456* with tickformat "%H~%M~%S.%2f" would
+            display *09~15~23.46*By default the values are
+            formatted using `xaxis.hoverformat`.
+        xperiod
+            Only relevant when the axis `type` is "date". Sets the
+            period positioning in milliseconds or "M<n>" on the x
+            axis. Special values in the form of "M<n>" could be
+            used to declare the number of months. In this case `n`
+            must be a positive integer.
+        xperiod0
+            Only relevant when the axis `type` is "date". Sets the
+            base for period positioning in milliseconds or date
+            string on the x0 axis. When `x0period` is round number
+            of weeks, the `x0period0` by default would be on a
+            Sunday i.e. 2000-01-02, otherwise it would be at
+            2000-01-01.
+        xperiodalignment
+            Only relevant when the axis `type` is "date". Sets the
+            alignment of data points on the x axis.
+        xsrc
+            Sets the source reference on Chart Studio Cloud for
+            `x`.
+        yaxis
+            Sets a reference between this trace's y coordinates and
+            a 2D cartesian y axis. If "y" (the default value), the
+            y coordinates refer to `layout.yaxis`. If "y2", the y
+            coordinates refer to `layout.yaxis2`, and so on.
+        yhoverformat
+            Sets the hover text formatting rulefor `y`  using d3
+            formatting mini-languages which are very similar to
+            those in Python. For numbers, see:
+            https://github.com/d3/d3-format/tree/v1.4.5#d3-format.
+            And for dates see: https://github.com/d3/d3-time-
+            format/tree/v2.2.3#locale_format. We add two items to
+            d3's date formatter: "%h" for half of the year as a
+            decimal number as well as "%{n}f" for fractional
+            seconds with n digits. For example, *2016-10-13
+            09:15:23.456* with tickformat "%H~%M~%S.%2f" would
+            display *09~15~23.46*By default the values are
+            formatted using `yaxis.hoverformat`.
+        zorder
+            Sets the layer on which this trace is displayed,
+            relative to other SVG traces on the same subplot. SVG
+            traces with higher `zorder` appear in front of those
+            with lower `zorder`.
+        
+Did you mean "hovertext"?
+
+Bad property path:
+hovertemplate
+^^^^^^^^^^^^^
+2025-08-13 16:11:40.349711 - Ready to plot: 277 rows for MSFT | Period=5 Years | Resolution=1 Hour
+2025-08-13 16:11:40.357607 - System error: Invalid property specified for object of type plotly.graph_objs.Candlestick: 'hovertemplate'
+
+Did you mean "hovertext"?
+
+    Valid properties:
+        close
+            Sets the close values.
+        closesrc
+            Sets the source reference on Chart Studio Cloud for
+            `close`.
+        customdata
+            Assigns extra data each datum. This may be useful when
+            listening to hover, click and selection events. Note
+            that, "scatter" traces also appends customdata items in
+            the markers DOM elements
+        customdatasrc
+            Sets the source reference on Chart Studio Cloud for
+            `customdata`.
+        decreasing
+            :class:`plotly.graph_objects.candlestick.Decreasing`
+            instance or dict with compatible properties
+        high
+            Sets the high values.
+        highsrc
+            Sets the source reference on Chart Studio Cloud for
+            `high`.
+        hoverinfo
+            Determines which trace information appear on hover. If
+            `none` or `skip` are set, no information is displayed
+            upon hovering. But, if `none` is set, click and hover
+            events are still fired.
+        hoverinfosrc
+            Sets the source reference on Chart Studio Cloud for
+            `hoverinfo`.
+        hoverlabel
+            :class:`plotly.graph_objects.candlestick.Hoverlabel`
+            instance or dict with compatible properties
+        hovertext
+            Same as `text`.
+        hovertextsrc
+            Sets the source reference on Chart Studio Cloud for
+            `hovertext`.
+        ids
+            Assigns id labels to each datum. These ids for object
+            constancy of data points during animation. Should be an
+            array of strings, not numbers or any other type.
+        idssrc
+            Sets the source reference on Chart Studio Cloud for
+            `ids`.
+        increasing
+            :class:`plotly.graph_objects.candlestick.Increasing`
+            instance or dict with compatible properties
+        legend
+            Sets the reference to a legend to show this trace in.
+            References to these legends are "legend", "legend2",
+            "legend3", etc. Settings for these legends are set in
+            the layout, under `layout.legend`, `layout.legend2`,
+            etc.
+        legendgroup
+            Sets the legend group for this trace. Traces and shapes
+            part of the same legend group hide/show at the same
+            time when toggling legend items.
+        legendgrouptitle
+            :class:`plotly.graph_objects.candlestick.Legendgrouptit
+            le` instance or dict with compatible properties
+        legendrank
+            Sets the legend rank for this trace. Items and groups
+            with smaller ranks are presented on top/left side while
+            with "reversed" `legend.traceorder` they are on
+            bottom/right side. The default legendrank is 1000, so
+            that you can use ranks less than 1000 to place certain
+            items before all unranked items, and ranks greater than
+            1000 to go after all unranked items. When having
+            unranked or equal rank items shapes would be displayed
+            after traces i.e. according to their order in data and
+            layout.
+        legendwidth
+            Sets the width (in px or fraction) of the legend for
+            this trace.
+        line
+            :class:`plotly.graph_objects.candlestick.Line` instance
+            or dict with compatible properties
+        low
+            Sets the low values.
+        lowsrc
+            Sets the source reference on Chart Studio Cloud for
+            `low`.
+        meta
+            Assigns extra meta information associated with this
+            trace that can be used in various text attributes.
+            Attributes such as trace `name`, graph, axis and
+            colorbar `title.text`, annotation `text`
+            `rangeselector`, `updatemenues` and `sliders` `label`
+            text all support `meta`. To access the trace `meta`
+            values in an attribute in the same trace, simply use
+            `%{meta[i]}` where `i` is the index or key of the
+            `meta` item in question. To access trace `meta` in
+            layout attributes, use `%{data[n[.meta[i]}` where `i`
+            is the index or key of the `meta` and `n` is the trace
+            index.
+        metasrc
+            Sets the source reference on Chart Studio Cloud for
+            `meta`.
+        name
+            Sets the trace name. The trace name appears as the
+            legend item and on hover.
+        opacity
+            Sets the opacity of the trace.
+        open
+            Sets the open values.
+        opensrc
+            Sets the source reference on Chart Studio Cloud for
+            `open`.
+        selectedpoints
+            Array containing integer indices of selected points.
+            Has an effect only for traces that support selections.
+            Note that an empty array means an empty selection where
+            the `unselected` are turned on for all points, whereas,
+            any other non-array values means no selection all where
+            the `selected` and `unselected` styles have no effect.
+        showlegend
+            Determines whether or not an item corresponding to this
+            trace is shown in the legend.
+        stream
+            :class:`plotly.graph_objects.candlestick.Stream`
+            instance or dict with compatible properties
+        text
+            Sets hover text elements associated with each sample
+            point. If a single string, the same string appears over
+            all the data points. If an array of string, the items
+            are mapped in order to this trace's sample points.
+        textsrc
+            Sets the source reference on Chart Studio Cloud for
+            `text`.
+        uid
+            Assign an id to this trace, Use this to provide object
+            constancy between traces during animations and
+            transitions.
+        uirevision
+            Controls persistence of some user-driven changes to the
+            trace: `constraintrange` in `parcoords` traces, as well
+            as some `editable: true` modifications such as `name`
+            and `colorbar.title`. Defaults to `layout.uirevision`.
+            Note that other user-driven trace attribute changes are
+            controlled by `layout` attributes: `trace.visible` is
+            controlled by `layout.legend.uirevision`,
+            `selectedpoints` is controlled by
+            `layout.selectionrevision`, and `colorbar.(x|y)`
+            (accessible with `config: {editable: true}`) is
+            controlled by `layout.editrevision`. Trace changes are
+            tracked by `uid`, which only falls back on trace index
+            if no `uid` is provided. So if your app can add/remove
+            traces before the end of the `data` array, such that
+            the same trace has a different index, you can still
+            preserve user-driven changes if you give each trace a
+            `uid` that stays with it as it moves.
+        visible
+            Determines whether or not this trace is visible. If
+            "legendonly", the trace is not drawn, but can appear as
+            a legend item (provided that the legend itself is
+            visible).
+        whiskerwidth
+            Sets the width of the whiskers relative to the box'
+            width. For example, with 1, the whiskers are as wide as
+            the box(es).
+        x
+            Sets the x coordinates. If absent, linear coordinate
+            will be generated.
+        xaxis
+            Sets a reference between this trace's x coordinates and
+            a 2D cartesian x axis. If "x" (the default value), the
+            x coordinates refer to `layout.xaxis`. If "x2", the x
+            coordinates refer to `layout.xaxis2`, and so on.
+        xcalendar
+            Sets the calendar system to use with `x` date data.
+        xhoverformat
+            Sets the hover text formatting rulefor `x`  using d3
+            formatting mini-languages which are very similar to
+            those in Python. For numbers, see:
+            https://github.com/d3/d3-format/tree/v1.4.5#d3-format.
+            And for dates see: https://github.com/d3/d3-time-
+            format/tree/v2.2.3#locale_format. We add two items to
+            d3's date formatter: "%h" for half of the year as a
+            decimal number as well as "%{n}f" for fractional
+            seconds with n digits. For example, *2016-10-13
+            09:15:23.456* with tickformat "%H~%M~%S.%2f" would
+            display *09~15~23.46*By default the values are
+            formatted using `xaxis.hoverformat`.
+        xperiod
+            Only relevant when the axis `type` is "date". Sets the
+            period positioning in milliseconds or "M<n>" on the x
+            axis. Special values in the form of "M<n>" could be
+            used to declare the number of months. In this case `n`
+            must be a positive integer.
+        xperiod0
+            Only relevant when the axis `type` is "date". Sets the
+            base for period positioning in milliseconds or date
+            string on the x0 axis. When `x0period` is round number
+            of weeks, the `x0period0` by default would be on a
+            Sunday i.e. 2000-01-02, otherwise it would be at
+            2000-01-01.
+        xperiodalignment
+            Only relevant when the axis `type` is "date". Sets the
+            alignment of data points on the x axis.
+        xsrc
+            Sets the source reference on Chart Studio Cloud for
+            `x`.
+        yaxis
+            Sets a reference between this trace's y coordinates and
+            a 2D cartesian y axis. If "y" (the default value), the
+            y coordinates refer to `layout.yaxis`. If "y2", the y
+            coordinates refer to `layout.yaxis2`, and so on.
+        yhoverformat
+            Sets the hover text formatting rulefor `y`  using d3
+            formatting mini-languages which are very similar to
+            those in Python. For numbers, see:
+            https://github.com/d3/d3-format/tree/v1.4.5#d3-format.
+            And for dates see: https://github.com/d3/d3-time-
+            format/tree/v2.2.3#locale_format. We add two items to
+            d3's date formatter: "%h" for half of the year as a
+            decimal number as well as "%{n}f" for fractional
+            seconds with n digits. For example, *2016-10-13
+            09:15:23.456* with tickformat "%H~%M~%S.%2f" would
+            display *09~15~23.46*By default the values are
+            formatted using `yaxis.hoverformat`.
+        zorder
+            Sets the layer on which this trace is displayed,
+            relative to other SVG traces on the same subplot. SVG
+            traces with higher `zorder` appear in front of those
+            with lower `zorder`.
+        
+Did you mean "hovertext"?
+
+Bad property path:
+hovertemplate
+^^^^^^^^^^^^^
+2025-08-13 16:11:42.181284 - Ready to plot: 277 rows for MSFT | Period=5 Years | Resolution=1 Hour
+2025-08-13 16:11:42.188761 - System error: Invalid property specified for object of type plotly.graph_objs.Candlestick: 'hovertemplate'
+
+Did you mean "hovertext"?
+
+    Valid properties:
+        close
+            Sets the close values.
+        closesrc
+            Sets the source reference on Chart Studio Cloud for
+            `close`.
+        customdata
+            Assigns extra data each datum. This may be useful when
+            listening to hover, click and selection events. Note
+            that, "scatter" traces also appends customdata items in
+            the markers DOM elements
+        customdatasrc
+            Sets the source reference on Chart Studio Cloud for
+            `customdata`.
+        decreasing
+            :class:`plotly.graph_objects.candlestick.Decreasing`
+            instance or dict with compatible properties
+        high
+            Sets the high values.
+        highsrc
+            Sets the source reference on Chart Studio Cloud for
+            `high`.
+        hoverinfo
+            Determines which trace information appear on hover. If
+            `none` or `skip` are set, no information is displayed
+            upon hovering. But, if `none` is set, click and hover
+            events are still fired.
+        hoverinfosrc
+            Sets the source reference on Chart Studio Cloud for
+            `hoverinfo`.
+        hoverlabel
+            :class:`plotly.graph_objects.candlestick.Hoverlabel`
+            instance or dict with compatible properties
+        hovertext
+            Same as `text`.
+        hovertextsrc
+            Sets the source reference on Chart Studio Cloud for
+            `hovertext`.
+        ids
+            Assigns id labels to each datum. These ids for object
+            constancy of data points during animation. Should be an
+            array of strings, not numbers or any other type.
+        idssrc
+            Sets the source reference on Chart Studio Cloud for
+            `ids`.
+        increasing
+            :class:`plotly.graph_objects.candlestick.Increasing`
+            instance or dict with compatible properties
+        legend
+            Sets the reference to a legend to show this trace in.
+            References to these legends are "legend", "legend2",
+            "legend3", etc. Settings for these legends are set in
+            the layout, under `layout.legend`, `layout.legend2`,
+            etc.
+        legendgroup
+            Sets the legend group for this trace. Traces and shapes
+            part of the same legend group hide/show at the same
+            time when toggling legend items.
+        legendgrouptitle
+            :class:`plotly.graph_objects.candlestick.Legendgrouptit
+            le` instance or dict with compatible properties
+        legendrank
+            Sets the legend rank for this trace. Items and groups
+            with smaller ranks are presented on top/left side while
+            with "reversed" `legend.traceorder` they are on
+            bottom/right side. The default legendrank is 1000, so
+            that you can use ranks less than 1000 to place certain
+            items before all unranked items, and ranks greater than
+            1000 to go after all unranked items. When having
+            unranked or equal rank items shapes would be displayed
+            after traces i.e. according to their order in data and
+            layout.
+        legendwidth
+            Sets the width (in px or fraction) of the legend for
+            this trace.
+        line
+            :class:`plotly.graph_objects.candlestick.Line` instance
+            or dict with compatible properties
+        low
+            Sets the low values.
+        lowsrc
+            Sets the source reference on Chart Studio Cloud for
+            `low`.
+        meta
+            Assigns extra meta information associated with this
+            trace that can be used in various text attributes.
+            Attributes such as trace `name`, graph, axis and
+            colorbar `title.text`, annotation `text`
+            `rangeselector`, `updatemenues` and `sliders` `label`
+            text all support `meta`. To access the trace `meta`
+            values in an attribute in the same trace, simply use
+            `%{meta[i]}` where `i` is the index or key of the
+            `meta` item in question. To access trace `meta` in
+            layout attributes, use `%{data[n[.meta[i]}` where `i`
+            is the index or key of the `meta` and `n` is the trace
+            index.
+        metasrc
+            Sets the source reference on Chart Studio Cloud for
+            `meta`.
+        name
+            Sets the trace name. The trace name appears as the
+            legend item and on hover.
+        opacity
+            Sets the opacity of the trace.
+        open
+            Sets the open values.
+        opensrc
+            Sets the source reference on Chart Studio Cloud for
+            `open`.
+        selectedpoints
+            Array containing integer indices of selected points.
+            Has an effect only for traces that support selections.
+            Note that an empty array means an empty selection where
+            the `unselected` are turned on for all points, whereas,
+            any other non-array values means no selection all where
+            the `selected` and `unselected` styles have no effect.
+        showlegend
+            Determines whether or not an item corresponding to this
+            trace is shown in the legend.
+        stream
+            :class:`plotly.graph_objects.candlestick.Stream`
+            instance or dict with compatible properties
+        text
+            Sets hover text elements associated with each sample
+            point. If a single string, the same string appears over
+            all the data points. If an array of string, the items
+            are mapped in order to this trace's sample points.
+        textsrc
+            Sets the source reference on Chart Studio Cloud for
+            `text`.
+        uid
+            Assign an id to this trace, Use this to provide object
+            constancy between traces during animations and
+            transitions.
+        uirevision
+            Controls persistence of some user-driven changes to the
+            trace: `constraintrange` in `parcoords` traces, as well
+            as some `editable: true` modifications such as `name`
+            and `colorbar.title`. Defaults to `layout.uirevision`.
+            Note that other user-driven trace attribute changes are
+            controlled by `layout` attributes: `trace.visible` is
+            controlled by `layout.legend.uirevision`,
+            `selectedpoints` is controlled by
+            `layout.selectionrevision`, and `colorbar.(x|y)`
+            (accessible with `config: {editable: true}`) is
+            controlled by `layout.editrevision`. Trace changes are
+            tracked by `uid`, which only falls back on trace index
+            if no `uid` is provided. So if your app can add/remove
+            traces before the end of the `data` array, such that
+            the same trace has a different index, you can still
+            preserve user-driven changes if you give each trace a
+            `uid` that stays with it as it moves.
+        visible
+            Determines whether or not this trace is visible. If
+            "legendonly", the trace is not drawn, but can appear as
+            a legend item (provided that the legend itself is
+            visible).
+        whiskerwidth
+            Sets the width of the whiskers relative to the box'
+            width. For example, with 1, the whiskers are as wide as
+            the box(es).
+        x
+            Sets the x coordinates. If absent, linear coordinate
+            will be generated.
+        xaxis
+            Sets a reference between this trace's x coordinates and
+            a 2D cartesian x axis. If "x" (the default value), the
+            x coordinates refer to `layout.xaxis`. If "x2", the x
+            coordinates refer to `layout.xaxis2`, and so on.
+        xcalendar
+            Sets the calendar system to use with `x` date data.
+        xhoverformat
+            Sets the hover text formatting rulefor `x`  using d3
+            formatting mini-languages which are very similar to
+            those in Python. For numbers, see:
+            https://github.com/d3/d3-format/tree/v1.4.5#d3-format.
+            And for dates see: https://github.com/d3/d3-time-
+            format/tree/v2.2.3#locale_format. We add two items to
+            d3's date formatter: "%h" for half of the year as a
+            decimal number as well as "%{n}f" for fractional
+            seconds with n digits. For example, *2016-10-13
+            09:15:23.456* with tickformat "%H~%M~%S.%2f" would
+            display *09~15~23.46*By default the values are
+            formatted using `xaxis.hoverformat`.
+        xperiod
+            Only relevant when the axis `type` is "date". Sets the
+            period positioning in milliseconds or "M<n>" on the x
+            axis. Special values in the form of "M<n>" could be
+            used to declare the number of months. In this case `n`
+            must be a positive integer.
+        xperiod0
+            Only relevant when the axis `type` is "date". Sets the
+            base for period positioning in milliseconds or date
+            string on the x0 axis. When `x0period` is round number
+            of weeks, the `x0period0` by default would be on a
+            Sunday i.e. 2000-01-02, otherwise it would be at
+            2000-01-01.
+        xperiodalignment
+            Only relevant when the axis `type` is "date". Sets the
+            alignment of data points on the x axis.
+        xsrc
+            Sets the source reference on Chart Studio Cloud for
+            `x`.
+        yaxis
+            Sets a reference between this trace's y coordinates and
+            a 2D cartesian y axis. If "y" (the default value), the
+            y coordinates refer to `layout.yaxis`. If "y2", the y
+            coordinates refer to `layout.yaxis2`, and so on.
+        yhoverformat
+            Sets the hover text formatting rulefor `y`  using d3
+            formatting mini-languages which are very similar to
+            those in Python. For numbers, see:
+            https://github.com/d3/d3-format/tree/v1.4.5#d3-format.
+            And for dates see: https://github.com/d3/d3-time-
+            format/tree/v2.2.3#locale_format. We add two items to
+            d3's date formatter: "%h" for half of the year as a
+            decimal number as well as "%{n}f" for fractional
+            seconds with n digits. For example, *2016-10-13
+            09:15:23.456* with tickformat "%H~%M~%S.%2f" would
+            display *09~15~23.46*By default the values are
+            formatted using `yaxis.hoverformat`.
+        zorder
+            Sets the layer on which this trace is displayed,
+            relative to other SVG traces on the same subplot. SVG
+            traces with higher `zorder` appear in front of those
+            with lower `zorder`.
+        
+Did you mean "hovertext"?
+
+Bad property path:
+hovertemplate
+^^^^^^^^^^^^^
+2025-08-13 16:16:41.791253 - Ready to plot: 957 rows for CL=F | Period=1 Day | Resolution=1 Minute
+2025-08-13 16:16:46.692937 - Ready to plot: 957 rows for CL=F | Period=1 Day | Resolution=1 Minute
+2025-08-13 16:16:52.802164 - Ready to plot: 46 rows for MSFT | Period=1 Day | Resolution=1 Minute
+2025-08-13 16:16:56.845442 - Ready to plot: 2 rows for MSFT | Period=1 Day | Resolution=30 Minutes
+2025-08-13 16:16:59.390464 - Ready to plot: 516 rows for MSFT | Period=3 Months | Resolution=30 Minutes
+2025-08-13 16:17:16.906493 - Ready to plot: 275 rows for MSFT | Period=1 Month | Resolution=30 Minutes
+2025-08-13 16:17:21.523692 - Ready to plot: 1601 rows for MSFT | Period=1 Month | Resolution=1 Minute
+2025-08-13 16:18:02.472201 - Ready to plot: 1601 rows for MSFT | Period=1 Month | Resolution=1 Minute
+2025-08-13 16:18:09.599967 - Ready to plot: 6307 rows for CL=F | Period=1 Month | Resolution=1 Minute
+2025-08-13 16:18:17.479206 - System error: No objects to concatenate
+2025-08-13 16:18:26.289116 - No raw data for XAU | Period=1 Month | Resolution=1 Minute
+2025-08-13 16:18:34.142174 - No raw data for XAU | Period=1 Month | Resolution=1 Day
+2025-08-13 16:18:35.805197 - No raw data for XAU | Period=2 Years | Resolution=1 Day
+2025-08-13 16:18:37.080440 - No raw data for XAU | Period=2 Years | Resolution=1 Day
+2025-08-13 16:18:40.948009 - No raw data for XAU | Period=2 Years | Resolution=1 Day
+2025-08-13 16:18:46.797566 - Ready to plot: 520 rows for EURUSD=X | Period=2 Years | Resolution=1 Day
+2025-08-13 16:19:12.553820 - Ready to plot: 23 rows for EURUSD=X | Period=1 Month | Resolution=1 Day
+2025-08-13 16:19:29.985370 - Ready to plot: 2085 rows for EURUSD=X | Period=1 Month | Resolution=15 Minutes
+2025-08-13 16:19:36.880661 - Ready to plot: 4045 rows for EURUSD=X | Period=3 Months | Resolution=15 Minutes
+2025-08-13 16:21:16.859171 - Ready to plot: 7027 rows for EURUSD=X | Period=3 Months | Resolution=1 Minute
+2025-08-13 16:21:24.717750 - Ready to plot: 1377 rows for EURUSD=X | Period=1 Day | Resolution=1 Minute
+2025-08-13 16:21:29.371679 - Ready to plot: 277 rows for EURUSD=X | Period=1 Day | Resolution=5 Minutes
+2025-08-13 16:21:32.924954 - Ready to plot: 1377 rows for EURUSD=X | Period=1 Day | Resolution=1 Minute
+2025-08-13 16:21:35.249610 - Ready to plot: 690 rows for EURUSD=X | Period=1 Day | Resolution=2 Minutes
+2025-08-13 16:22:27.769942 - Ready to plot: 277 rows for EURUSD=X | Period=1 Day | Resolution=5 Minutes
+2025-08-13 16:22:48.940077 - Ready to plot: 6253 rows for EURUSD=X | Period=1 Month | Resolution=5 Minutes
+2025-08-13 16:23:01.708634 - Ready to plot: 524 rows for EURUSD=X | Period=1 Month | Resolution=1 Hour
+2025-08-13 16:27:15.719151 - Ready to plot: 957 rows for CL=F | Period=1 Day | Resolution=1 Minute
+2025-08-13 16:51:29.594326 - System error: plotly_events() got an unexpected keyword argument 'events'
+2025-08-13 16:51:48.986802 - System error: plotly_events() got an unexpected keyword argument 'events'
+2025-08-13 17:09:34.990827 - Auto tuned interval -> 2m
+2025-08-13 17:09:34.991410 - System error: module 'streamlit' has no attribute 'experimental_rerun'
+2025-08-13 17:09:53.943500 - Auto tuned interval -> 2m
+2025-08-13 17:09:53.944286 - System error: module 'streamlit' has no attribute 'experimental_rerun'
+2025-08-13 17:09:59.332186 - Cache cleared by user.
+2025-08-13 17:09:59.332905 - Cache clear failed: module 'streamlit' has no attribute 'experimental_rerun'
+2025-08-13 17:10:43.958272 - Auto tuned interval -> 2m
+2025-08-13 17:10:43.958907 - System error: module 'streamlit' has no attribute 'experimental_rerun'
+2025-08-13 17:10:46.920451 - Auto tuned interval -> 15m
+2025-08-13 17:10:46.921020 - System error: module 'streamlit' has no attribute 'experimental_rerun'
+2025-08-13 17:10:48.924012 - Cache cleared by user.
+2025-08-13 17:10:48.924605 - Cache clear failed: module 'streamlit' has no attribute 'experimental_rerun'
+2025-08-13 17:10:50.459389 - Auto tuned interval -> 5m
+2025-08-13 17:10:50.460142 - System error: module 'streamlit' has no attribute 'experimental_rerun'
+2025-08-13 17:10:51.761227 - Auto tuned interval -> 15m
+2025-08-13 17:10:51.761791 - System error: module 'streamlit' has no attribute 'experimental_rerun'
+2025-08-13 17:10:52.573392 - Auto tuned interval -> 30m
+2025-08-13 17:10:52.574000 - System error: module 'streamlit' has no attribute 'experimental_rerun'
+2025-08-13 17:10:53.549326 - Auto tuned interval -> 5m
+2025-08-13 17:10:53.549973 - System error: module 'streamlit' has no attribute 'experimental_rerun'
+2025-08-13 17:11:24.905089 - Auto tuned interval -> 1h
+2025-08-13 17:11:24.905785 - System error: module 'streamlit' has no attribute 'experimental_rerun'
+2025-08-13 17:34:09.367796 - Cache cleared by user.
+2025-08-13 17:34:09.368205 - Cache clear failed: module 'streamlit' has no attribute 'experimental_rerun'
+2025-08-13 17:34:10.691807 - Cache cleared by user.
+2025-08-13 17:34:10.692371 - Cache clear failed: module 'streamlit' has no attribute 'experimental_rerun'
+2025-08-13 17:34:22.378450 - Cache cleared by user.
+2025-08-13 17:34:22.379293 - Cache clear failed: module 'streamlit' has no attribute 'experimental_rerun'
+2025-08-13 17:34:23.792709 - Cache cleared by user.
+2025-08-13 17:34:23.793421 - Cache clear failed: module 'streamlit' has no attribute 'experimental_rerun'
+2025-08-13 17:40:08.138549 - Cache cleared by user.
+2025-08-13 17:40:54.595980 - Cache cleared by user.
+2025-08-13 17:40:56.719920 - Cache cleared by user.
+2025-08-13 17:55:13.601233 - Cache cleared by user.
+2025-08-13 17:55:21.138672 - Cache cleared by user.
+2025-08-13 17:55:24.152679 - Cache cleared by user.
+2025-08-13 17:55:39.186478 - Cache cleared by user.
+2025-08-13 17:55:43.473004 - Cache cleared by user.
+2025-08-13 18:06:51.060028 - Cache cleared by user.
+2025-08-13 18:34:24.162563 - No raw data for XAU | Period=1 Day | Interval=1m
+2025-08-13 18:35:05.051680 - Resolution coarser -> 2m
+2025-08-13 18:35:06.263597 - Resolution coarser -> 5m
+2025-08-13 19:16:15.112991 - No raw data for `XAU | Period=1 Day | Interval=1m
+2025-08-13 19:16:39.357656 - No raw data for 'XAU | Period=1 Day | Interval=1m
+2025-08-13 19:17:27.922077 - No raw data for XAU=:EXCHANGE | Period=1 Day | Interval=1m
+2025-08-13 19:17:34.711918 - No raw data for XAU=: | Period=1 Day | Interval=1m
+2025-08-13 19:17:36.123101 - No raw data for XAU= | Period=1 Day | Interval=1m
+2025-08-13 19:55:22.701032 - Added drawing: {'type': 'Measure (Δ)', 'color': '#00E5FF', 'width': 2, 'opacity': 0.85, 'params': {'i0': 1594, 'i1': 4784}}
+2025-08-13 19:56:00.584235 - Added drawing: {'type': 'Fibonacci', 'color': '#00E5FF', 'width': 2, 'opacity': 0.85, 'params': {'i0': 1594, 'i1': 4784, 'yA': 63.81999969482422, 'yB': 63.470001220703125}}
+2025-08-13 19:56:17.935715 - Added drawing: {'type': 'Fibonacci', 'color': '#00E5FF', 'width': 8, 'opacity': 0.85, 'params': {'i0': 1594, 'i1': 4784, 'yA': 63.81999969482422, 'yB': 63.470001220703125}}
+2025-08-13 19:57:22.285509 - Resolution coarser -> 2m
+2025-08-13 19:57:24.303811 - Resolution finer -> 1m
+2025-08-13 19:57:26.863942 - Resolution coarser -> 2m
+2025-08-13 19:57:50.994282 - Added drawing: {'type': 'Trend line', 'color': '#00ff35', 'width': 8, 'opacity': 0.25, 'params': {'i0': 3429, 'i1': 10288}}
+2025-08-13 19:58:33.182314 - Cache cleared by user.
+2025-08-13 19:59:09.319733 - Cache cleared by user.
+2025-08-13 19:59:13.300644 - Resolution coarser -> 2m
+2025-08-13 19:59:13.834352 - Resolution finer -> 1m
+2025-08-13 19:59:14.835568 - Cache cleared by user.
+2025-08-13 19:59:21.154157 - Cache cleared by user.
