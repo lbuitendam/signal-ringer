@@ -2,9 +2,8 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   createChart,
   type IChartApi,
-  type ISeriesApi,
-  type CandlestickData,
   type UTCTimestamp,
+  type CandlestickData,
 } from "lightweight-charts";
 import type { Anchor, Drawing, Ohlcv } from "./types";
 import { fibLines } from "./tools/fibonacci";
@@ -35,8 +34,10 @@ export function Chart({
   const containerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
 
+  // v4 API: chart.addCandlestickSeries() exists
   const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  // keep this `any` to avoid type friction between v4/v5
+  const seriesRef = useRef<any>(null);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Anchor[]>([]);
@@ -51,6 +52,7 @@ export function Chart({
       grid: { vertLines: { color: "#1f2937" }, horzLines: { color: "#1f2937" } },
     });
 
+    // 👉 v4 method
     const s = chart.addCandlestickSeries({
       upColor: "#26a69a",
       downColor: "#ef5350",
@@ -76,7 +78,8 @@ export function Chart({
     ro.observe(el);
 
     chart.timeScale().subscribeVisibleTimeRangeChange(drawAll);
-    chart.timeScale().subscribeVisibleLogicalRangeChange?.(drawAll);
+    // visibleLogicalRange exists in v4, optional chaining is fine if not
+    (chart.timeScale() as any).subscribeVisibleLogicalRangeChange?.(drawAll);
 
     chartRef.current = chart;
     seriesRef.current = s;
