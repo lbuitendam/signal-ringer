@@ -12,6 +12,9 @@ from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 from uuid import uuid4
 from zoneinfo import ZoneInfo
+from st_trading_draw import st_trading_draw
+import json
+
 
 import numpy as np
 import pandas as pd
@@ -275,6 +278,63 @@ if "indicators_store" not in st.session_state:
 
 prof_key = _profile_key(ticker, interval)
 ind_list = st.session_state["indicators_store"].get(prof_key, [])
+
+with st.popover("Options"):  # reuse your existing popover
+    st.markdown("#### Drawing Tools")
+    enable_draw = st.toggle("Enable drawing toolbar", value=True, help="Show floating/dockable drawing toolbar.")
+    magnet = st.toggle("Magnet snap to candles", value=True)
+    st.caption("Export / Import drawings (JSON) are below the chart.")
+
+# Prepare data for the component
+ohlcv_payload = [
+    dict(time=int(ts.timestamp()), open=float(o), high=float(h), low=float(l), close=float(c), volume=float(v) if "Volume" in df else None)
+    for ts, o, h, l, c, v in zip(
+        df.index, df["Open"], df["High"], df["Low"], df["Close"], df["Volume"] if "Volume" in df else [0]*len(df)
+    )
+]
+
+# Session persistence keys
+if "drawings" not in st.session_state:
+    st.session_state["drawings"] = {}
+profile_key = f"{ticker}@{interval}"
+initial = st.session_state["drawings"].get(profile_key, {})
+
+draw_state = {}
+if enable_draw:
+    draw_state = st_trading_draw(
+        ohlcv=ohlcv_payload,
+        symbol=ticker,
+        timeframe=interval,
+        initial_drawings=initial,
+        magnet=magnet,
+        toolbar_default="docked-right",
+        key=f"draw_{profile_key}",
+    )
+    # Persist back to session
+    if isinstance(draw_state, dict) and "drawings" in draw_state:
+        st.session_state["drawings"][profile_key] = draw_state["drawings"]
+
+# Export / Import controls (below the chart, or in Options)
+with st.expander("Drawings: Export / Import", expanded=False):
+    colx, coly = st.columns(2)
+    with colx:
+        st.download_button(
+            "Export drawings (JSON)",
+            data=json.dumps(st.session_state["drawings"].get(profile_key, {}), indent=2),
+            file_name=f"drawings_{profile_key}.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+    with coly:
+        up = st.file_uploader("Import drawings (JSON)", type=["json"])
+        if up:
+            try:
+                payload = json.loads(up.read().decode("utf-8"))
+                st.session_state["drawings"][profile_key] = payload
+                st.success("Imported drawings")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Import failed: {e}")
 
 # Only draw currently visible indicators
 visible_inds = [i for i in ind_list if i.get("visible", True)]
