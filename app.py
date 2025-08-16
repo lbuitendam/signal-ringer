@@ -226,14 +226,6 @@ with col_right:
                 "min_conf": PAT_DEFAULTS["min_confidence"],
                 "enabled_names": [
                     "Hammer",
-                    "Inverted Hammer",
-                    "Bullish Engulfing",
-                    "Bearish Engulfing",
-                    "Doji",
-                    "Morning Star",
-                    "Evening Star",
-                    "Bullish Harami",
-                    "Bearish Harami",
                     "Tweezer Top",
                     "Tweezer Bottom",
                 ],
@@ -256,38 +248,42 @@ with col_right:
 
         with st.expander("Select patterns"):
             all_names = [
-                "Hammer",
-                "Inverted Hammer",
-                "Bullish Engulfing",
-                "Bearish Engulfing",
-                "Doji",
-                "Morning Star",
-                "Evening Star",
-                "Bullish Harami",
-                "Bearish Harami",
-                "Tweezer Top",
-                "Tweezer Bottom",
-                # v2 stubs (off by default)
-                "Piercing Line",
-                "Dark Cloud Cover",
-                "Three White Soldiers",
-                "Three Black Crows",
-                "Three Inside Up",
-                "Three Inside Down",
-                "Three Outside Up",
-                "Three Outside Down",
-                "Marubozu",
-                "Rising Window",
-                "Falling Window",
-                "Tasuki Up",
-                "Tasuki Down",
-                "Kicker Bull",
-                "Kicker Bear",
-                "Rising Three Methods",
-                "Falling Three Methods",
-                "Mat Hold",
-                # Head & Shoulders will appear here once added to engine.RULES
-            ]
+    "Hammer",
+    "Inverted Hammer",
+    "Bullish Engulfing",
+    "Bearish Engulfing",
+    "Doji",
+    "Morning Star",
+    "Evening Star",
+    "Bullish Harami",
+    "Bearish Harami",
+    "Tweezer Top",
+    "Tweezer Bottom",
+    "Head and Shoulders",              # <-- add
+    "Inverse Head and Shoulders",      # <-- add
+    # v2 stubs...
+    "Piercing Line",
+    "Dark Cloud Cover",
+    "Three White Soldiers",
+    "Three Black Crows",
+    "Three Inside Up",
+    "Three Inside Down",
+    "Three Outside Up",
+    "Three Outside Down",
+    "Marubozu",
+    "Rising Window",
+    "Falling Window",
+    "Tasuki Up",
+    "Tasuki Down",
+    "Kicker Bull",
+    "Kicker Bear",
+    "Rising Three Methods",
+    "Falling Three Methods",
+    "Mat Hold",
+]
+
+
+        
             chosen = set(pst["enabled_names"])
             new_selected = []
             for nm in all_names:
