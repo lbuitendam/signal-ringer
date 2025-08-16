@@ -1,4 +1,3 @@
-@"
 __pycache__/
 *.pyc
 venv/
@@ -8,8 +7,13 @@ Thumbs.db
 .vscode/
 .env
 .streamlit/secrets.toml
-build/
-dist/
 *.exe
 *.pkg
-"@ | Out-File -Encoding UTF8 .gitignore
+
+# Ignore generic build outputs
+**/build/**
+**/dist/**
+
+# BUT keep our Streamlit component bundles
+!st_trading_draw/frontend/build/**
+!st_trading_draw/frontend/dist/**
