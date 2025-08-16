@@ -4,8 +4,9 @@ import {
   type IChartApi,
   type UTCTimestamp,
   type CandlestickData,
+  type ISeriesApi,
 } from "lightweight-charts";
-import type { Anchor, Drawing, Ohlcv } from "./types";
+import type { Anchor, Drawing, Ohlcv, OverlaySeriesLine, Marker } from "./types";
 import { fibLines } from "./tools/fibonacci";
 import { rectBounds } from "./tools/rect";
 import { measure } from "./tools/measure";
@@ -21,6 +22,11 @@ export interface ChartProps {
   activeTool: string | null;
   magnet: boolean;
   toolbarKey: string;
+
+  overlays?: OverlaySeriesLine[];
+  onReady?: (api: IChartApi) => void;
+
+  markers?: Marker[];
 }
 
 export function Chart({
@@ -30,29 +36,66 @@ export function Chart({
   activeTool,
   magnet,
   toolbarKey,
+  overlays = [],
+  markers = [],
+  onReady,
 }: ChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
 
-  // v4 API: chart.addCandlestickSeries() exists
   const chartRef = useRef<IChartApi | null>(null);
-  // keep this `any` to avoid type friction between v4/v5
   const seriesRef = useRef<any>(null);
+  const normDataRef = useRef<CandlestickData[]>([]);
+  const overlaySeriesMap = useRef<Map<string, ISeriesApi<"Line">>>(new Map());
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Anchor[]>([]);
 
+  function toLWTime(t: number | string): number {
+    if (typeof t === "number") return t > 1e12 ? Math.floor(t / 1000) : Math.floor(t);
+    const ms = Date.parse(t);
+    return Math.floor(ms / 1000);
+  }
+
+  function normalizeData(rows: any[]): CandlestickData[] {
+    if (!Array.isArray(rows)) return [];
+    const out = rows
+      .filter(
+        (r) =>
+          r &&
+          r.time != null &&
+          Number.isFinite(r.open) &&
+          Number.isFinite(r.high) &&
+          Number.isFinite(r.low) &&
+          Number.isFinite(r.close)
+      )
+      .map((r) => ({
+        time: toLWTime(r.time) as UTCTimestamp,
+        open: +r.open,
+        high: +r.high,
+        low: +r.low,
+        close: +r.close,
+      }));
+    out.sort((a, b) => (a.time as number) - (b.time as number));
+    return out;
+  }
+
   useEffect(() => {
-    const el = containerRef.current!;
+    const el = containerRef.current;
+    if (!el) return;
+
+    if (!el.style.minHeight) el.style.minHeight = "420px";
+    el.style.position = "relative";
+
     const chart = createChart(el, {
       width: el.clientWidth,
-      height: 520,
+      height: el.clientHeight || 520,
       layout: { background: { color: "#0e1117" }, textColor: "#e5e7eb" },
       timeScale: { rightOffset: 2, borderColor: "#333" },
       grid: { vertLines: { color: "#1f2937" }, horzLines: { color: "#1f2937" } },
+      handleScroll: { mouseWheel: true, pressedMouseMove: true },
+      handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: { time: true, price: true } },
     });
 
-    // 👉 v4 method
     const s = chart.addCandlestickSeries({
       upColor: "#26a69a",
       downColor: "#ef5350",
@@ -61,42 +104,131 @@ export function Chart({
       borderVisible: false,
     });
 
-    s.setData(
-      data.map((d) => ({
-        time: unix(d.time),
-        open: d.open,
-        high: d.high,
-        low: d.low,
-        close: d.close,
-      })) as CandlestickData[]
-    );
+    chartRef.current = chart;
+    seriesRef.current = s;
+    onReady?.(chart);
+
+    // overlay canvas
+    const overlay = overlayRef.current;
+    const sizeOverlay = () => {
+      if (!overlay || !el) return;
+      const rect = el.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      overlay.width = Math.floor(rect.width * dpr);
+      overlay.height = Math.floor(rect.height * dpr);
+      overlay.style.width = rect.width + "px";
+      overlay.style.height = rect.height + "px";
+      const ctx = overlay.getContext("2d");
+      if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    sizeOverlay();
 
     const ro = new ResizeObserver(() => {
-      chart.applyOptions({ width: el.clientWidth });
+      chart.applyOptions({ width: el.clientWidth, height: el.clientHeight || 520 });
+      sizeOverlay();
       drawAll();
     });
     ro.observe(el);
 
-    chart.timeScale().subscribeVisibleTimeRangeChange(drawAll);
-    // visibleLogicalRange exists in v4, optional chaining is fine if not
-    (chart.timeScale() as any).subscribeVisibleLogicalRangeChange?.(drawAll);
-
-    chartRef.current = chart;
-    seriesRef.current = s;
+    const onRangeChange = () => {
+      sizeOverlay();
+      drawAll();
+    };
+    chart.timeScale().subscribeVisibleTimeRangeChange(onRangeChange);
+    const tsAny = chart.timeScale() as any;
+    const hasLogical =
+      typeof tsAny.subscribeVisibleLogicalRangeChange === "function" &&
+      typeof tsAny.unsubscribeVisibleLogicalRangeChange === "function";
+    if (hasLogical) tsAny.subscribeVisibleLogicalRangeChange(onRangeChange);
 
     return () => {
       ro.disconnect();
+      chart.timeScale().unsubscribeVisibleTimeRangeChange(onRangeChange);
+      if (hasLogical) tsAny.unsubscribeVisibleLogicalRangeChange(onRangeChange);
+      for (const s of overlaySeriesMap.current.values()) chart.removeSeries(s);
+      overlaySeriesMap.current.clear();
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
+      normDataRef.current = [];
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
+    const s = seriesRef.current;
+    if (!s) return;
+    const norm = normalizeData(data);
+    if (!norm.length) return;
+    normDataRef.current = norm;
+    s.setData(norm);
     drawAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drawings]);
+  }, [data]);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+
+    // remove missing
+    const nextIds = new Set(overlays.map((o) => o.id));
+    for (const [id, s] of overlaySeriesMap.current) {
+      if (!nextIds.has(id)) {
+        chart.removeSeries(s);
+        overlaySeriesMap.current.delete(id);
+      }
+    }
+
+    for (const o of overlays) {
+      const lw = Math.max(1, Math.round((o.width ?? 2) as number)) as any;
+      const ls = (o.dash === "dash" ? 1 : o.dash === "dot" ? 2 : 0) as any;
+
+      let line = overlaySeriesMap.current.get(o.id);
+      if (!line) {
+        line = chart.addLineSeries({
+          color: o.color || "#33cccc",
+          lineWidth: lw as any,
+          lineStyle: ls,
+          priceLineVisible: false,
+        });
+        overlaySeriesMap.current.set(o.id, line);
+      } else {
+        line.applyOptions({
+          color: o.color || "#33cccc",
+          lineWidth: lw as any,
+          lineStyle: ls,
+        } as any);
+      }
+
+      const lineData = (o.data || [])
+        .filter((r) => r && r.time != null && Number.isFinite(r.value))
+        .map((r) => ({ time: toLWTime(r.time) as UTCTimestamp, value: +r.value }))
+        .sort((a, b) => (a.time as number) - (b.time as number));
+      if (lineData.length) line.setData(lineData);
+    }
+
+    drawAll();
+  }, [overlays]);
+
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    const chart = chartRef.current as any;
+    const drawingActive = !!(activeTool && activeTool !== "select");
+    if (overlay) {
+      overlay.style.pointerEvents = drawingActive ? "auto" : "none";
+      overlay.style.cursor = drawingActive ? "crosshair" : "default";
+    }
+    if (chart?.applyOptions) {
+      chart.applyOptions({
+        handleScroll: drawingActive
+          ? { mouseWheel: false, pressedMouseMove: false, horzTouchDrag: false, vertTouchDrag: false }
+          : { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
+        handleScale: drawingActive
+          ? { mouseWheel: false, pinch: false, axisPressedMouseMove: { time: false, price: false } }
+          : { mouseWheel: true, pinch: true, axisPressedMouseMove: { time: true, price: true } },
+      });
+    }
+  }, [activeTool]);
 
   function toXY(a: Anchor) {
     const chart = chartRef.current;
@@ -110,51 +242,81 @@ export function Chart({
   }
 
   function nearestCandle(time: number, price: number): Anchor {
-    let idx = 0;
-    let best = Number.POSITIVE_INFINITY;
-    for (let i = 0; i < data.length; i++) {
-      const diff = Math.abs(data[i].time - time);
+    const arr = normDataRef.current;
+    if (!arr.length) return { time, price };
+    let idx = 0,
+      best = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < arr.length; i++) {
+      const diff = Math.abs((arr[i].time as number) - time);
       if (diff < best) {
         best = diff;
         idx = i;
       }
     }
-    return { time: data[idx].time, price };
+    return { time: arr[idx].time as number, price };
   }
 
   function addDrawing(d: Drawing) {
     const copy = { ...drawings, [d.id]: d };
     setDrawings(copy);
-    persist(copy);
-  }
-  function updateDrawing(id: string, d: Partial<Drawing>) {
-    const nd = { ...drawings[id], ...d, meta: { ...drawings[id].meta, updatedAt: Date.now() } };
-    const copy = { ...drawings, [id]: nd };
-    setDrawings(copy);
-    persist(copy);
-  }
-  function persist(d: Record<string, Drawing>) {
     try {
-      localStorage.setItem(`drawings:${toolbarKey}`, JSON.stringify(d));
+      localStorage.setItem(`drawings:${toolbarKey}`, JSON.stringify(copy));
     } catch {}
   }
 
-  function drawAll() {
-    const canvas = overlayRef.current;
+  // helpers for markers
+  function findCandleAt(ts: number): CandlestickData | null {
+    const arr = normDataRef.current;
+    if (!arr.length) return null;
+    // binary search would be nicer; linear is fine for now
+    for (let i = 0; i < arr.length; i++) {
+      if ((arr[i].time as number) === ts) return arr[i];
+    }
+    return null;
+  }
+
+  function normalizeMarker(m: Marker): { x: number | null; y: number | null; side: "above" | "below" | "inBar"; color: string; label?: string } {
     const chart = chartRef.current;
     const s = seriesRef.current;
+    if (!chart || !s) return { x: null, y: null, side: "inBar", color: "#60a5fa" };
+
+    const ts = toLWTime(m.time);
+    const candle = findCandleAt(ts);
+    let side: "above" | "below" | "inBar" =
+      m.side || (m.position === "aboveBar" ? "above" : m.position === "belowBar" ? "below" : "inBar");
+
+    // pick a price if absent
+    let price =
+      typeof m.price === "number"
+        ? m.price
+        : candle
+        ? side === "above"
+          ? (candle.high as number)
+          : side === "below"
+          ? (candle.low as number)
+          : (candle.close as number)
+        : NaN;
+
+    const x = chart.timeScale().timeToCoordinate(ts as UTCTimestamp);
+    const y = s.priceToCoordinate(price);
+
+    const color =
+      m.color || (side === "above" ? "#ef5350" : side === "below" ? "#26a69a" : "#60a5fa");
+
+    return { x: x ?? null, y: y ?? null, side, color, label: m.label };
+  }
+
+  function drawAll() {
+    const canvas = overlayRef.current,
+      chart = chartRef.current,
+      s = seriesRef.current;
     if (!canvas || !chart || !s) return;
+    const ctx = canvas.getContext("2d")!,
+      rect = canvas.getBoundingClientRect();
+    ctx.clearRect(0, 0, rect.width, rect.height);
 
-    const ctx = canvas.getContext("2d")!;
-    const { width, height } = canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.floor(width * dpr);
-    canvas.height = Math.floor(height * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, width, height);
-
+    // drawings
     const items = Object.values(drawings).filter((d) => d.props.visible !== false);
-
     for (const d of items) {
       ctx.lineWidth = d.props.width ?? 1.5;
       ctx.strokeStyle = d.props.color ?? "#eab308";
@@ -163,15 +325,15 @@ export function Chart({
       if (d.type === "trendline" || d.type === "ray") {
         const [a, b] = d.anchors;
         if (!a || !b) continue;
-        const A = toXY(a);
-        const B = toXY(b);
+        const A = toXY(a),
+          B = toXY(b);
         if (!A || !B) continue;
         ctx.beginPath();
         ctx.moveTo(A.x, A.y);
         if (d.type === "ray") {
-          const dx = B.x - A.x;
-          const dy = B.y - A.y;
-          const k = (width - A.x) / (dx || 1e-6);
+          const dx = B.x - A.x,
+            dy = B.y - A.y,
+            k = (rect.width - A.x) / (dx || 1e-6);
           ctx.lineTo(A.x + dx * k, A.y + dy * k);
         } else {
           ctx.lineTo(B.x, B.y);
@@ -182,7 +344,7 @@ export function Chart({
         if (y == null) continue;
         ctx.beginPath();
         ctx.moveTo(0, y);
-        ctx.lineTo(width, y);
+        ctx.lineTo(rect.width, y);
         ctx.stroke();
       } else if (d.type === "rect") {
         const rb = rectBounds(d.anchors);
@@ -216,8 +378,8 @@ export function Chart({
       } else if (d.type === "measure") {
         const [a, b] = d.anchors;
         if (!a || !b) continue;
-        const A = toXY(a);
-        const B = toXY(b);
+        const A = toXY(a),
+          B = toXY(b);
         if (!A || !B) continue;
         ctx.beginPath();
         ctx.moveTo(A.x, A.y);
@@ -246,14 +408,49 @@ export function Chart({
         }
       }
     }
+
+    // markers
+    for (const raw of markers) {
+      const m = normalizeMarker(raw);
+      if (m.x == null || m.y == null) continue;
+      const size = 6;
+      ctx.beginPath();
+      if (m.side === "above") {
+        ctx.moveTo(m.x, m.y - size);
+        ctx.lineTo(m.x - size, m.y + size);
+        ctx.lineTo(m.x + size, m.y + size);
+      } else if (m.side === "below") {
+        ctx.moveTo(m.x, m.y + size);
+        ctx.lineTo(m.x - size, m.y - size);
+        ctx.lineTo(m.x + size, m.y - size);
+      } else {
+        // small diamond for inBar
+        ctx.moveTo(m.x, m.y - size);
+        ctx.lineTo(m.x + size, m.y);
+        ctx.lineTo(m.x, m.y + size);
+        ctx.lineTo(m.x - size, m.y);
+      }
+      ctx.closePath();
+      ctx.fillStyle = m.color;
+      ctx.fill();
+
+      if (m.label) {
+        ctx.fillStyle = "#e5e7eb";
+        ctx.font = "10px Inter, system-ui, sans-serif";
+        ctx.fillText(m.label, m.x + 8, m.y + (m.side === "above" ? 0 : -2));
+      }
+    }
   }
 
-  function onCanvasClick(ev: React.MouseEvent<HTMLCanvasElement>) {
+  function onCanvasPointerDown(ev: React.MouseEvent<HTMLCanvasElement>) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (!activeTool || activeTool === "select") return;
     const rect = (ev.target as HTMLCanvasElement).getBoundingClientRect();
-    const x = ev.clientX - rect.left;
-    const y = ev.clientY - rect.top;
-    const chart = chartRef.current;
-    const s = seriesRef.current;
+    const x = ev.clientX - rect.left,
+      y = ev.clientY - rect.top;
+    const chart = chartRef.current,
+      s = seriesRef.current;
     if (!chart || !s) return;
     const t = chart.timeScale().coordinateToTime(x) as UTCTimestamp | null;
     const p = s.coordinateToPrice(y) as number | null;
@@ -262,21 +459,9 @@ export function Chart({
     let a = { time: Number(t), price: p };
     if (magnet) a = nearestCandle(a.time, a.price);
 
-    if (!activeTool || activeTool === "select") {
-      setSelectedId(null);
-      return;
-    }
-
     const next = [...draft, a];
 
-    if (
-      activeTool === "trendline" ||
-      activeTool === "ray" ||
-      activeTool === "measure" ||
-      activeTool === "fib_retracement" ||
-      activeTool === "fib_extension" ||
-      activeTool === "rect"
-    ) {
+    if (["trendline", "ray", "measure", "fib_retracement", "fib_extension", "rect"].includes(activeTool)) {
       if (next.length === 2) {
         const id = crypto.randomUUID();
         addDrawing({
@@ -305,7 +490,7 @@ export function Chart({
         meta: { createdAt: Date.now(), updatedAt: Date.now(), z: 0 },
       });
     } else if (activeTool === "path") {
-      setDraft(next); // double-click to commit
+      setDraft(next);
     }
   }
 
@@ -324,12 +509,12 @@ export function Chart({
   }
 
   return (
-    <div style={{ position: "relative", width: "100%", height: 540 }} ref={containerRef}>
+    <div ref={containerRef} style={{ position: "relative", width: "100%", height: 540 }}>
       <canvas
         ref={overlayRef}
-        onClick={onCanvasClick}
+        onMouseDown={onCanvasPointerDown}
         onDoubleClick={onCanvasDoubleClick}
-        style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", pointerEvents: "auto" }}
+        style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", zIndex: 5, pointerEvents: "none" }}
       />
     </div>
   );

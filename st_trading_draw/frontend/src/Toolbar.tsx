@@ -1,109 +1,148 @@
-import { useEffect, useRef, useState } from "react";
-import type { DrawingType } from "./types";
 import React from "react";
 
+export type ToolName =
+  | "select"
+  | "trendline"
+  | "ray"
+  | "rect"
+  | "hline"
+  | "path"
+  | "text"
+  | "measure"
+  | "fib_retracement"
+  | "fib_extension";
 
-type Mode = "floating" | "docked-left" | "docked-right";
-export interface ToolbarState { mode: Mode; x: number; y: number }
+type Dock = "left" | "right" | "floating";
+
 export interface ToolbarProps {
-  state: ToolbarState; setState: (s: ToolbarState)=>void;
-  active: DrawingType | null; setActive: (t: DrawingType | null)=>void;
-  onCmd: (cmd: string)=>void;
+  activeTool: ToolName | null;
+  onSelect: (tool: ToolName | null) => void;
+  dock: Dock;
+  setDock: (d: Dock) => void;
+  canClear?: boolean;
+  onClear?: () => void;
+  magnet?: boolean;           // optional indicator
 }
 
-const BTN: Array<{k: DrawingType | "select"; label: string}> = [
-  {k:"select" as any, label:"Select"},
-  {k:"trendline", label:"Trend"},
-  {k:"ray", label:"Ray"},
-  {k:"hline", label:"HLine"},
-  {k:"rect", label:"Rect"},
-  {k:"path", label:"Path"},
-  {k:"text", label:"Text"},
-  {k:"measure", label:"Measure"},
-  {k:"fib_retracement", label:"FibRet"},
-  {k:"fib_extension", label:"FibExt"}
+const tools: { key: ToolName; label: string }[] = [
+  { key: "select",          label: "Sel" },
+  { key: "trendline",       label: "TL" },
+  { key: "ray",             label: "Ray" },
+  { key: "rect",            label: "Rect" },
+  { key: "hline",           label: "H" },
+  { key: "path",            label: "Path" },
+  { key: "text",            label: "Txt" },
+  { key: "measure",         label: "Meas" },
+  { key: "fib_retracement", label: "FibR" },
+  { key: "fib_extension",   label: "FibX" },
 ];
 
-export function Toolbar({state,setState,active,setActive,onCmd}:ToolbarProps){
-  const ref = useRef<HTMLDivElement>(null);
-  const [drag, setDrag] = useState<{ox:number; oy:number} | null>(null);
+export const Toolbar: React.FC<ToolbarProps> = ({
+  activeTool,
+  onSelect,
+  dock,
+  setDock,
+  canClear,
+  onClear,
+  magnet,
+}) => {
+  const base: React.CSSProperties = {
+    position: "absolute",
+    top: 8,
+    zIndex: 3,
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    background: "#0b0f15",
+    border: "1px solid #222",
+    borderRadius: 10,
+    padding: 8,
+    boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+    userSelect: "none",
+  };
 
-  useEffect(()=>{ // Dock positioning
-    if(state.mode==="docked-left"){ setState({...state,x:12,y:12}); }
-    if(state.mode==="docked-right"){ setState({...state,x:undefined as any,y:12}); }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[state.mode]);
+  const pos: React.CSSProperties =
+    dock === "left"
+      ? { left: 8 }
+      : dock === "right"
+      ? { right: 8 }
+      : { left: 16, top: 16, cursor: "move" }; // (floating = manual drag if you add it later)
 
-  function onPointerDown(e: React.PointerEvent){
-    if(state.mode!=="floating") return;
-    const el = ref.current; if(!el) return;
-    el.setPointerCapture(e.pointerId);
-    setDrag({ox:e.clientX - (state.x||12), oy:e.clientY - (state.y||12)});
-  }
-  function onPointerMove(e: React.PointerEvent){
-    if(!drag || state.mode!=="floating") return;
-    setState({...state, x: e.clientX - drag.ox, y: e.clientY - drag.oy});
-  }
-  function onPointerUp(e: React.PointerEvent){
-    const el = ref.current; if(!el) return;
-    try{ el.releasePointerCapture(e.pointerId);}catch{}
-    setDrag(null);
-  }
+  const btn: React.CSSProperties = {
+    font: "12px/1 system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
+    color: "#e5e7eb",
+    background: "transparent",
+    border: "1px solid #2a2f36",
+    borderRadius: 8,
+    padding: "6px 8px",
+    cursor: "pointer",
+  };
+
+  const btnActive: React.CSSProperties = {
+    ...btn,
+    background: "#1e293b",
+    borderColor: "#3b4251",
+  };
+
+  const row: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(5, auto)", gap: 6 };
 
   return (
-    <div
-      ref={ref}
-      style={{
-        position: "absolute",
-        top: state.mode==="floating" ? (state.y ?? 12) : 12,
-        left: state.mode==="docked-left" ? 12 : (state.mode==="floating" ? (state.x ?? 12) : "auto"),
-        right: state.mode==="docked-right" ? 12 : "auto",
-        background: "rgba(18,20,24,0.9)",
-        border: "1px solid #333",
-        borderRadius: 8,
-        padding: 8,
-        display: "flex",
-        gap: 6,
-        flexWrap: "wrap",
-        zIndex: 9999,
-        userSelect: "none",
-        cursor: state.mode==="floating" ? "grab" : "default"
-      }}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-    >
-      {BTN.map(b => (
+    <div style={{ ...base, ...pos }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 6 }}>
         <button
-          key={b.k as string}
-          onClick={()=> setActive(b.k as DrawingType)}
-          style={{
-            padding: "4px 6px",
-            background: (active===b.k ? "#3b82f6" : "#1f2937"),
-            color: "#e5e7eb", border: "1px solid #374151",
-            borderRadius: 6, fontSize: 12
-          }}
-          title={b.label}
-        >{b.label}</button>
-      ))}
-      <div style={{display:"flex",gap:6, marginLeft:6}}>
-        <button onClick={()=>onCmd("undo")}>Undo</button>
-        <button onClick={()=>onCmd("redo")}>Redo</button>
-        <button onClick={()=>onCmd("hideAll")}>Hide</button>
-        <button onClick={()=>onCmd("showAll")}>Show</button>
-        <button onClick={()=>onCmd("deleteSelected")}>Delete</button>
-        <button onClick={()=>onCmd("clearAll")}>Clear</button>
-        <select
-          value={state.mode}
-          onChange={(e)=>setState({...state, mode: e.target.value as Mode})}
-          style={{background:"#111827", color:"#e5e7eb", border:"1px solid #374151", borderRadius:6}}
-          title="Dock / Float"
+          style={btn}
+          onClick={() => setDock(dock === "left" ? "right" : "left")}
+          title={`Dock: ${dock}`}
         >
-          <option value="floating">Floating</option>
-          <option value="docked-left">Dock Left</option>
-          <option value="docked-right">Dock Right</option>
-        </select>
+          {dock === "left" ? "⟷ Right" : "⟷ Left"}
+        </button>
+        {typeof magnet === "boolean" && (
+          <div
+            title={magnet ? "Magnet: on" : "Magnet: off"}
+            style={{
+              ...btn,
+              padding: "6px 10px",
+              background: magnet ? "#0b3d2a" : undefined,
+              borderColor: magnet ? "#115e3e" : "#2a2f36",
+            }}
+          >
+            🧲
+          </div>
+        )}
+      </div>
+
+      <div style={row}>
+        {tools.map((t) => (
+          <button
+            key={t.key}
+            style={activeTool === t.key ? btnActive : btn}
+            onClick={() => onSelect(activeTool === t.key ? null : t.key)}
+            title={t.label}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+        <button
+          style={{ ...btn, color: "#fca5a5", borderColor: "#4c1d1d" }}
+          onClick={() => onSelect(null)}
+          title="Stop drawing"
+        >
+          ✕ Stop
+        </button>
+        <button
+          style={{ ...btn, color: "#f87171", borderColor: "#4c1d1d", opacity: canClear ? 1 : 0.5 }}
+          onClick={() => canClear && onClear && onClear()}
+          disabled={!canClear}
+          title="Clear all drawings"
+        >
+          Clear
+        </button>
       </div>
     </div>
   );
-}
+};
+
+export default Toolbar;

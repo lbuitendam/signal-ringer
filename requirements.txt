@@ -1,7 +1,9 @@
 streamlit>=1.33
-plotly>=5.20
+plotly>=5.20           # harmless if you keep it
 yfinance>=0.2.40
 pandas>=2.2
 numpy>=1.26
 pytz>=2024.1
 tzlocal>=5.2
+tzdata>=2024.1         # <— recommended on Windows for zoneinfo
+backports.zoneinfo; python_version < "3.9"   # <— only if someone runs older Python

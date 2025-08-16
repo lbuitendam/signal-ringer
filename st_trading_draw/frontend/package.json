@@ -14,10 +14,10 @@
     "streamlit-component-lib": "2.0.0"
   },
   "devDependencies": {
-    "@types/react": "18.2.74",
-    "@types/react-dom": "18.2.24",
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "4.3.1",
-    "typescript": "5.5.4",
+    "typescript": "^5.9.2",
     "vite": "5.4.2"
   }
 }
