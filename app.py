@@ -8,6 +8,7 @@ from typing import List, Optional, Tuple
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+import logging
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -15,16 +16,87 @@ import yfinance as yf
 
 from st_trading_draw import st_trading_draw
 
-# ---- Pattern engine ----
+import asyncio
+from ui.sidebar import sidebar, load_settings
+from engine.runner import run_engine_loop
+from engine.utils import OrderSuggestion
+from alerts.messages import format_entry, maybe_toast, csv_log
+from risk.manager import RiskOptions
+
 from patterns.engine import (
     DEFAULT_CONFIG as PAT_DEFAULTS,
     detect_all,
     hits_to_markers,
 )
 
+# ---- Logging: quiet by default ----
+logging.basicConfig(level=logging.ERROR, format="%(levelname)s:%(name)s:%(message)s")
+logging.getLogger("yfinance").setLevel(logging.ERROR)
+logging.getLogger("signal_ringer.engine").setLevel(logging.ERROR)
+
+st.set_page_config(layout="wide", page_title="Signal Ringer — Multi-symbol Paper Bot")
+
+st.title("📈 Signal Ringer — Paper Trade Suggestions")
+wl, opts, risk = sidebar()
+
+log_rows: list[dict] = []
+
+placeholder = st.empty()
+log_table = st.empty()
+
+def on_suggestion(sug: OrderSuggestion):
+    msg = format_entry(sug)
+    maybe_toast(msg)
+    log_rows.append({
+        "time": pd.Timestamp.utcnow().isoformat(),
+        "symbol": sug.symbol,
+        "tf": sug.timeframe,
+        "side": sug.side,
+        "qty": sug.qty,
+        "entry": sug.entry,
+        "sl": sug.sl,
+        "tp": "|".join(map(str,sug.tp)),
+        "strategy": sug.strategy,
+        "conf": sug.confidence,
+        "reason": sug.reason,
+    })
+    log_df = pd.DataFrame(log_rows).tail(200)
+    log_table.dataframe(log_df, use_container_width=True)
+
+if "engine_running" not in st.session_state:
+    st.session_state["engine_running"] = False
+
+col1, col2 = st.columns([1,1])
+with col1:
+    if st.button("▶ Start Live Scan", disabled=st.session_state["engine_running"]):
+        st.session_state["engine_running"] = True
+        st.success("Engine starting...")
+
+with col2:
+    if st.button("⏹ Stop"):
+        st.session_state["engine_running"] = False
+        st.warning("Engine stopped")
+
+if st.session_state["engine_running"]:
+    risk_opts = RiskOptions(**risk)
+    async def main():
+        await run_engine_loop(
+            trackers=wl,
+            strategies_cfg=opts,
+            risk_opts=risk_opts,
+            on_suggestion=on_suggestion,
+            interval_sec=30
+        )
+    # Streamlit + asyncio: run once per refresh
+    asyncio.run(main())
+
+if log_rows:
+    if st.button("💾 Export CSV"):
+        csv_log("data/logs.csv", log_rows)
+        st.success("Logged to data/logs.csv")
+
 # -------------------- Config --------------------
 LOCAL_TZ = "Europe/Berlin"
-st.set_page_config(page_title="Signal Ringer • Chart", layout="wide")
 
 # -------------------- Sidebar (choose data first) --------------------
 ASSET_CLASSES = ["Stocks", "ETFs", "Forex", "Crypto", "Commodities (Futures)"]
@@ -214,7 +286,7 @@ with col_right:
                             st.warning("Fast must be < Slow.")
 
         st.divider()
-        # ------------- Patterns (NEW) -------------
+        # ------------- Patterns -------------
         st.markdown("#### Patterns")
         pkey = f"{ticker}@{interval}"
         if "patterns_state" not in st.session_state:
@@ -224,11 +296,7 @@ with col_right:
             {
                 "enabled": True,
                 "min_conf": PAT_DEFAULTS["min_confidence"],
-                "enabled_names": [
-                    "Hammer",
-                    "Tweezer Top",
-                    "Tweezer Bottom",
-                ],
+                "enabled_names": [],
                 "cfg": PAT_DEFAULTS.copy(),
                 "last_alert_idx": {},
             },
@@ -246,51 +314,50 @@ with col_right:
             pst["cfg"] = PAT_DEFAULTS.copy()
             st.success("Pattern thresholds restored.")
 
-        with st.expander("Select patterns"):
-            all_names = [
-    "Hammer",
-    "Inverted Hammer",
-    "Bullish Engulfing",
-    "Bearish Engulfing",
-    "Doji",
-    "Morning Star",
-    "Evening Star",
-    "Bullish Harami",
-    "Bearish Harami",
-    "Tweezer Top",
-    "Tweezer Bottom",
-    "Head and Shoulders",              # <-- add
-    "Inverse Head and Shoulders",      # <-- add
-    # v2 stubs...
-    "Piercing Line",
-    "Dark Cloud Cover",
-    "Three White Soldiers",
-    "Three Black Crows",
-    "Three Inside Up",
-    "Three Inside Down",
-    "Three Outside Up",
-    "Three Outside Down",
-    "Marubozu",
-    "Rising Window",
-    "Falling Window",
-    "Tasuki Up",
-    "Tasuki Down",
-    "Kicker Bull",
-    "Kicker Bear",
-    "Rising Three Methods",
-    "Falling Three Methods",
-    "Mat Hold",
-]
-
-
-        
-            chosen = set(pst["enabled_names"])
-            new_selected = []
-            for nm in all_names:
-                val = st.checkbox(nm, value=(nm in chosen))
-                if val:
-                    new_selected.append(nm)
-            pst["enabled_names"] = new_selected
+with st.expander("Select patterns"):
+    all_names = [
+        "Hammer",
+        "Inverted Hammer",
+        "Bullish Engulfing",
+        "Bearish Engulfing",
+        "Doji",
+        "Morning Star",
+        "Evening Star",
+        "Bullish Harami",
+        "Bearish Harami",
+        "Tweezer Top",
+        "Tweezer Bottom",
+        # v2
+        "Head & Shoulders",
+        "Inverse Head & Shoulders",
+        "Piercing Line",
+        "Dark Cloud Cover",
+        "Three White Soldiers",
+        "Three Black Crows",
+        "Three Inside Up",
+        "Three Inside Down",
+        "Three Outside Up",
+        "Three Outside Down",
+        "Marubozu",
+        "Rising Window",
+        "Falling Window",
+        "Tasuki Up",
+        "Tasuki Down",
+        "Kicker Bull",
+        "Kicker Bear",
+        "Rising Three Methods",
+        "Falling Three Methods",
+        "Mat Hold",
+    ]
+    chosen = set(st.session_state["patterns_state"][f"{ticker}@{interval}"]["enabled_names"]
+                 if "patterns_state" in st.session_state and f"{ticker}@{interval}" in st.session_state["patterns_state"]
+                 else [])
+    new_selected = []
+    for nm in all_names:
+        val = st.checkbox(nm, value=(nm in chosen), key=f"pat_{nm}")
+        if val:
+            new_selected.append(nm)
+    st.session_state["patterns_state"][f"{ticker}@{interval}"]["enabled_names"] = new_selected
 
 st.markdown("</div></div>", unsafe_allow_html=True)
 
@@ -304,8 +371,9 @@ def _period_days(yf_period: str) -> float:
     return {
         "1d": 1,
         "5d": 5,
+        "1w": 7,
         "1mo": 30,
-        "3mo": 90,
+        "3mo": 91,
         "6mo": 182,
         "ytd": float(_days_since_jan1_now()),
         "1y": 365,
@@ -553,8 +621,13 @@ for ind in [i for i in visible_inds if i["type"] == "MACD"]:
     })
 
 # -------------------- Pattern detection + markers --------------------
-pattern_markers = []
+pattern_markers: list = []
 profile_key = _profile_key(ticker, interval)
+
+# Always define defaults so we don't reference-before-assign
+hits = []
+df_slice = df
+offset = 0
 
 if "patterns_state" in st.session_state and profile_key in st.session_state["patterns_state"]:
     pst = st.session_state["patterns_state"][profile_key]
@@ -562,42 +635,46 @@ if "patterns_state" in st.session_state and profile_key in st.session_state["pat
         # evaluate a tail slice for speed
         N = min(len(df), 400)
         df_slice = df.iloc[-N:].copy()
-        hits = detect_all(df_slice, pst["enabled_names"], pst["cfg"])
+        try:
+            hits = detect_all(df_slice, pst["enabled_names"], pst["cfg"])
+        except Exception:
+            hits = []
 
-        # offset to original df index
-        offset = len(df) - N
-        for h in hits:
-            h.index += offset
-            h.bars = [b + offset for b in h.bars]
+# offset to original df index
+offset = len(df) - len(df_slice)
+for h in hits:
+    h.index += offset
+    h.bars = [b + offset for b in h.bars]
 
-        # alerts + throttle
-        if "signals_log" not in st.session_state:
-            st.session_state["signals_log"] = []
-        last_idx = pst.setdefault("last_alert_idx", {})
-        new_hits = []
-        for h in hits:
-            if h.confidence < pst["min_conf"]:
-                continue
-            li = last_idx.get(h.name, -10**9)
-            if h.index - li >= pst["cfg"]["min_bars_between_alerts"]:
-                last_idx[h.name] = h.index
-                new_hits.append(h)
-                ts_local = df.index[h.index].astimezone(ZoneInfo(LOCAL_TZ)).strftime("%Y-%m-%d %H:%M")
-                try:
-                    st.toast(f"[{ticker} {interval}] {h.name} @ {ts_local}  (conf {h.confidence:.2f})")
-                except Exception:
-                    st.info(f"[{ticker} {interval}] {h.name} @ {ts_local}  (conf {h.confidence:.2f})")
-                st.session_state["signals_log"].append({
-                    "time": df.index[h.index].isoformat(),
-                    "symbol": ticker,
-                    "tf": interval,
-                    "pattern": h.name,
-                    "dir": h.direction,
-                    "conf": round(h.confidence, 3),
-                    "price": float(df['Close'].iat[h.index]),
-                })
+# safety filter: keep only explicitly enabled names
+enabled_set = set(st.session_state["patterns_state"][profile_key]["enabled_names"]) \
+    if "patterns_state" in st.session_state and profile_key in st.session_state["patterns_state"] else set()
+hits = [h for h in hits if h.name in enabled_set]
 
-        pattern_markers = hits_to_markers(hits, df)
+# alerts + throttle (LOG ONLY — no toast)
+if "signals_log" not in st.session_state:
+    st.session_state["signals_log"] = []
+if "patterns_state" in st.session_state and profile_key in st.session_state["patterns_state"]:
+    pst = st.session_state["patterns_state"][profile_key]
+    last_idx = pst.setdefault("last_alert_idx", {})
+    for h in hits:
+        if h.confidence < pst["min_conf"]:
+            continue
+        li = last_idx.get(h.name, -10**9)
+        if h.index - li >= pst["cfg"]["min_bars_between_alerts"]:
+            last_idx[h.name] = h.index
+            st.session_state["signals_log"].append({
+                "time": df.index[h.index].isoformat(),
+                "symbol": ticker,
+                "tf": interval,
+                "pattern": h.name,
+                "dir": h.direction,
+                "conf": round(h.confidence, 3),
+                "price": float(df['Close'].iat[h.index]),
+            })
+
+# markers for chart
+pattern_markers = hits_to_markers(hits, df)
 
 # -------------------- Drawings persistence + component render --------------------
 if "drawings" not in st.session_state:

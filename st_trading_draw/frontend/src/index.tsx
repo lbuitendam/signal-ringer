@@ -1,146 +1,113 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import ReactDOM from "react-dom";
+// st_trading_draw/frontend/src/index.tsx
+import React, { useEffect, useState } from "react";
 import { Streamlit, withStreamlitConnection } from "streamlit-component-lib";
 import { Chart } from "./Chart";
-import { Toolbar, type ToolName } from "./Toolbar";
-import IndicatorsPane from "./IndicatorsPane";
-import type {
-  Drawing,
-  Ohlcv,
-  OverlaySeriesLine,
-  PaneSpec,
-  Marker,
-} from "./types";
-import type { IChartApi } from "lightweight-charts";
+import type { Drawing, Ohlcv, OverlaySeriesLine, PaneSpec, Marker } from "./types";
+import "./styles.css";
 
-type Args = {
-  // base
-  ohlcv?: Ohlcv[];
-  data?: Ohlcv[]; // alias
-  symbol?: string;
-  timeframe?: string;
-
-  // drawings
-  initial_drawings?: Record<string, Drawing>;
-  magnet?: boolean;
-  toolbar_default?: "docked-right" | "docked-left" | "floating";
-  toolbarKey?: string;
-  activeTool?: ToolName | null;
-
-  // indicators & panes
-  overlay_indicators?: OverlaySeriesLine[];
-  pane_indicators?: PaneSpec[];
-
-  // patterns
-  markers?: Marker[];
+type Props = {
+  args: {
+    ohlcv: Ohlcv[];
+    symbol: string;
+    timeframe: string;
+    initial_drawings: Record<string, Drawing>;
+    magnet: boolean;
+    toolbar_default: string;
+    overlay_indicators: OverlaySeriesLine[];
+    pane_indicators: PaneSpec[];
+    markers: Marker[];
+  };
 };
 
-const Component = (props: any) => {
-  const args = (props.args || {}) as Args;
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { err?: any }> {
+  constructor(props: any) { super(props); this.state = { err: undefined }; }
+  componentDidCatch(err: any) { this.setState({ err }); Streamlit.setFrameHeight(); }
+  render() {
+    if (this.state.err) {
+      return (
+        <div style={{ padding: 12, fontFamily: "system-ui, sans-serif", color: "#fca5a5" }}>
+          <b>Component error:</b>
+          <pre style={{ whiteSpace: "pre-wrap" }}>{String(this.state.err?.message || this.state.err)}</pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
-  const data = useMemo<Ohlcv[]>(
-    () =>
-      Array.isArray(args.data)
-        ? args.data
-        : Array.isArray(args.ohlcv)
-        ? args.ohlcv
-        : [],
-    [args.data, args.ohlcv]
+function useLocal<T>(key: string, init: T): [T, (v: T) => void] {
+  const [v, setV] = useState<T>(() => {
+    try { const s = localStorage.getItem(key); return s ? (JSON.parse(s) as T) : init; }
+    catch { return init; }
+  });
+  const set = (x: T) => { setV(x); try { localStorage.setItem(key, JSON.stringify(x)); } catch {} };
+  return [v, set];
+}
+
+const Root: React.FC<Props> = ({ args }) => {
+  const {
+    ohlcv = [], symbol = "", timeframe = "", initial_drawings = {},
+    magnet = false, toolbar_default = "docked-right",
+    overlay_indicators = [], pane_indicators = [], markers = [],
+  } = args || ({} as Props["args"]);
+
+  const [drawings, setDrawings] = useState<Record<string, Drawing>>(initial_drawings || {});
+  const [activeTool, setActiveTool] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useLocal<boolean>("toolbar:collapsed", false);
+
+  useEffect(() => { Streamlit.setComponentReady(); Streamlit.setFrameHeight(); const id = window.setInterval(() => Streamlit.setFrameHeight(), 400); return () => window.clearInterval(id); }, []);
+  useEffect(() => { const onKey = (e: KeyboardEvent) => e.key === "Escape" && setActiveTool(null); window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey); }, []);
+  useEffect(() => { Streamlit.setComponentValue({ drawings }); }, [drawings]);
+  useEffect(() => { Streamlit.setFrameHeight(); }, [ohlcv, overlay_indicators, pane_indicators, markers, collapsed, activeTool]);
+
+  const ToolButton = (props: { id: string; label: string }) => (
+    <button className={`tool-btn ${activeTool === props.id ? "active" : ""}`} onClick={() => setActiveTool((t) => (t === props.id ? null : props.id))} title={props.label}>
+      {props.label}
+    </button>
   );
-
-  const overlays = useMemo<OverlaySeriesLine[]>(
-    () =>
-      Array.isArray(args.overlay_indicators) ? args.overlay_indicators : [],
-    [args.overlay_indicators]
-  );
-
-  const panes = useMemo<PaneSpec[]>(
-    () => (Array.isArray(args.pane_indicators) ? args.pane_indicators : []),
-    [args.pane_indicators]
-  );
-
-  const markers = useMemo<Marker[]>(
-    () => (Array.isArray(args.markers) ? args.markers : []),
-    [args.markers]
-  );
-
-  // drawings
-  const [drawings, setDrawings] = useState<Record<string, Drawing>>(
-    args.initial_drawings || {}
-  );
-  useEffect(() => {
-    Streamlit.setComponentValue({ drawings });
-  }, [drawings]);
-
-  // tool & dock
-  const [activeTool, setActiveTool] = useState<ToolName | null>(
-    typeof args.activeTool === "undefined" ? null : args.activeTool
-  );
-  useEffect(() => {
-    if (typeof args.activeTool !== "undefined") setActiveTool(args.activeTool);
-  }, [args.activeTool]);
-
-  const defaultDock =
-    args.toolbar_default === "docked-left"
-      ? "left"
-      : args.toolbar_default === "floating"
-      ? "floating"
-      : "right";
-  const [dock, setDock] = useState<"left" | "right" | "floating">(defaultDock);
-
-  const magnet = !!args.magnet;
-  const toolbarKey =
-    args.toolbarKey || `${args.symbol || "SYMBOL"}@${args.timeframe || "TF"}`;
-
-  // main chart ref for pane sync
-  const mainChartRef = useRef<IChartApi | null>(null);
-
-  // dynamic height: 560 for main + sum of pane heights
-  const totalHeight =
-    560 + (panes?.reduce((acc, p) => acc + (p.height || 0), 0) || 0);
-
-  useEffect(() => {
-    Streamlit.setFrameHeight(totalHeight);
-  }, [totalHeight, panes?.length]);
 
   return (
-    <div style={{ position: "relative", width: "100%", height: totalHeight }}>
-      {/* Main chart */}
-      <div style={{ position: "relative", width: "100%", height: 560 }}>
+    <ErrorBoundary>
+      <div className="root">
+        <div className={`toolbar ${collapsed ? "collapsed" : ""}`}>
+          <div className="toolbar-header">
+            <span className="title">Tools</span>
+            <button className="min-btn" onClick={() => setCollapsed(!collapsed)}>{collapsed ? "›" : "–"}</button>
+          </div>
+          {!collapsed && (
+            <div className="toolbar-body">
+              <div className="group">
+                <ToolButton id="select" label="Select" />
+                <ToolButton id="trendline" label="Trend" />
+                <ToolButton id="ray" label="Ray" />
+                <ToolButton id="rect" label="Rect" />
+                <ToolButton id="path" label="Path" />
+                <ToolButton id="hline" label="HLine" />
+                <ToolButton id="measure" label="Measure" />
+                <ToolButton id="fib_retracement" label="Fib" />
+                <ToolButton id="text" label="Text" />
+              </div>
+              <div className="hint">ESC to cancel • Right-click to cancel a draft</div>
+            </div>
+          )}
+        </div>
+
+        {!collapsed && <div className="toolbar-spacer" />}
+
         <Chart
-          data={data}
+          data={ohlcv}
           drawings={drawings}
           setDrawings={setDrawings}
           activeTool={activeTool}
           magnet={magnet}
-          toolbarKey={toolbarKey}
-          overlays={overlays}
+          toolbarKey={`${symbol}@${timeframe}`}
+          overlays={overlay_indicators}
           markers={markers}
-          onReady={(api) => {
-            mainChartRef.current = api;
-          }}
-        />
-        <Toolbar
-          activeTool={activeTool}
-          onSelect={setActiveTool}
-          dock={dock}
-          setDock={setDock}
-          canClear={Object.keys(drawings).length > 0}
-          onClear={() => setDrawings({})}
-          magnet={magnet}
+          onReady={() => {}}
         />
       </div>
-
-      {/* Indicator panes (RSI / MACD / etc) */}
-      {panes.map((p) => (
-        <div key={p.id} style={{ width: "100%", height: p.height }}>
-          <IndicatorsPane pane={p} syncWith={mainChartRef.current || undefined} />
-        </div>
-      ))}
-    </div>
+    </ErrorBoundary>
   );
 };
 
-const Wrapped = withStreamlitConnection(Component);
-ReactDOM.render(<Wrapped />, document.getElementById("root"));
-Streamlit.setComponentReady();
+export default withStreamlitConnection(Root);

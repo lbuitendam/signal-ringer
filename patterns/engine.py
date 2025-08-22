@@ -7,10 +7,12 @@ import pandas as pd
 
 # ----------------- Config -----------------
 DEFAULT_CONFIG: Dict[str, Any] = {
-    # generic
+    # generic context
     "trend_lookback": 5,
     "atr_lookback": 14,
     "gap_min_atr_mult": 0.15,
+
+    # doji / hammer family
     "doji_body_max_k": 0.1,  # body <= k * median(range)
     "hammer_lower_wick_min_mult": 2.0,
     "hammer_upper_wick_max_mult": 0.25,
@@ -18,28 +20,59 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "inv_hammer_upper_wick_min_mult": 2.0,
     "inv_hammer_lower_wick_max_mult": 0.25,
     "inv_hammer_body_pos_max": 0.34,
+
+    # engulfing / misc
     "engulfing_min_body_frac": 0.4,  # vs median range
     "harami_body_inside_tol": 0.0,   # strict inside
     "tweezer_tol_atr_mult": 0.15,
     "star_middle_body_frac": 0.2,    # 2nd bar "small"
+
+    # multi-bar “long body” baseline
+    "long_body_frac": 0.5,           # body >= 50% of median true range
+    "small_body_frac": 0.25,         # body <= 25% of median true range
+
+    # marubozu
+    "maru_min_body_frac": 0.7,       # body >= 70% of range
+    "maru_max_wick_frac": 0.15,      # each wick <= 15% of range
+
+    # three soldiers / crows
+    "soldier_crow_min_body_frac": 0.45,
+    "soldier_crow_max_wick_frac": 0.35,
+
+    # three methods
+    "methods_pullback_small": 0.35,  # counter bars are “small” vs bar1 range
+    "methods_n_bars": 3,
+
+    # kicker
+    "kicker_gap_min_atr": 0.25,      # minimum gap vs ATR
+
+    # tasuki
+    "tasuki_gap_min_atr": 0.2,
+
+    # windows
+    "window_gap_min_atr": 0.2,
+
+    # alerts
     "min_bars_between_alerts": 3,
     "min_confidence": 0.6,
 
-    # Head & Shoulders (and inverse) specific
-    "hs_swing_lookback": 3,          # pivot window on each side
-    "hs_shoulders_tol_atr": 0.6,     # shoulders (L vs R) within X * ATR
-    "hs_head_min_prom_atr": 0.8,     # head must exceed shoulders by >= X * ATR
-    "hs_confirm_max_bars": 5,        # confirmation (neckline break) window after R
+    # --- Head & Shoulders specific ---
+    "hs_swing": 3,                     # pivot radius (bars on each side)
+    "hs_min_separation": 6,            # min bars between key pivots
+    "hs_shoulder_tol": 0.03,           # shoulders equal within 3%
+    "hs_head_min_diff": 0.03,          # head ≥3% above/ below shoulders
+    "hs_confirm_lookahead": 25,        # bars after R-shoulder to confirm
+    "hs_neckline_buffer_atr_mult": 0.05, # ATR buffer through neckline
 }
 
 # ----------------- Data model -----------------
 @dataclass
 class PatternHit:
     name: str
-    index: int             # the bar where pattern completes (R or confirmation break)
-    bars: List[int]        # involved bars (e.g., [L,H,R] or [i-1,i] etc.)
-    direction: str         # "bull" | "bear" | "neutral"
-    confidence: float      # 0..1
+    index: int
+    bars: List[int]
+    direction: str  # "bull" | "bear" | "neutral"
+    confidence: float
     explanation: str
 
 # ----------------- Helpers -----------------
@@ -50,12 +83,12 @@ def _features(df: pd.DataFrame) -> pd.DataFrame:
     up = h - np.maximum(o, c)
     dn = np.minimum(o, c) - l
     body_pos = (np.maximum(o, c) - l) / rng  # 0 bottom .. 1 top
-    color = np.where(c >= o, 1, -1)
-    return pd.DataFrame(
-        {"o": o, "h": h, "l": l, "c": c, "body": body, "range": rng,
-         "up": up, "dn": dn, "body_pos": body_pos, "color": color},
-        index=df.index,
-    )
+    color = np.where(c >= o, 1, -1)  # green/red
+    out = pd.DataFrame({
+        "o": o, "h": h, "l": l, "c": c, "body": body, "range": rng,
+        "up": up, "dn": dn, "body_pos": body_pos, "color": color
+    }, index=df.index)
+    return out
 
 def _sma(x: pd.Series, n: int) -> pd.Series:
     return x.rolling(n, min_periods=1).mean()
@@ -63,52 +96,35 @@ def _sma(x: pd.Series, n: int) -> pd.Series:
 def _atr(df: pd.DataFrame, n: int) -> pd.Series:
     h, l, c = df["High"], df["Low"], df["Close"]
     prev_c = c.shift(1)
-    tr = pd.concat([(h - l), (h - prev_c).abs(), (l - prev_c).abs()], axis=1).max(axis=1)
+    tr = pd.concat([
+        (h - l),
+        (h - prev_c).abs(),
+        (l - prev_c).abs()
+    ], axis=1).max(axis=1)
     return tr.rolling(n, min_periods=1).mean()
 
 def _median_range(feat: pd.DataFrame, n: int = 100) -> float:
     return float(pd.Series(feat["range"]).tail(n).median())
 
 def _is_downtrend(close: pd.Series, lookback: int) -> pd.Series:
-    ma = _sma(close, lookback); slope = ma - ma.shift(3)
+    ma = _sma(close, lookback)
+    slope = ma - ma.shift(3)
     return (close < ma) & (slope < 0)
 
 def _is_uptrend(close: pd.Series, lookback: int) -> pd.Series:
-    ma = _sma(close, lookback); slope = ma - ma.shift(3)
+    ma = _sma(close, lookback)
+    slope = ma - ma.shift(3)
     return (close > ma) & (slope > 0)
 
-def _gap_up(df: pd.DataFrame, atr: pd.Series, i: int, cfg: Dict[str, Any]) -> bool:
+def _gap_up(df: pd.DataFrame, atr: pd.Series, i: int, mult: float) -> bool:
     if i <= 0: return False
-    return df["Low"].iat[i] > df["High"].iat[i-1] + cfg["gap_min_atr_mult"] * atr.iat[i]
+    return df["Low"].iat[i] > df["High"].iat[i-1] + mult * atr.iat[i]
 
-def _gap_down(df: pd.DataFrame, atr: pd.Series, i: int, cfg: Dict[str, Any]) -> bool:
+def _gap_down(df: pd.DataFrame, atr: pd.Series, i: int, mult: float) -> bool:
     if i <= 0: return False
-    return df["High"].iat[i] < df["Low"].iat[i-1] - cfg["gap_min_atr_mult"] * atr.iat[i]
+    return df["High"].iat[i] < df["Low"].iat[i-1] - mult * atr.iat[i]
 
-# ---------- Pivot utilities (for Head & Shoulders) ----------
-def _pivot_highs(high: np.ndarray, L: int) -> List[int]:
-    n = len(high); idx: List[int] = []
-    for i in range(L, n - L):
-        if high[i] == np.max(high[i - L:i + L + 1]):
-            # ensure strict local max (avoid flat runs picking many)
-            if high[i] > high[i-1] or high[i] > high[i+1]:
-                idx.append(i)
-    return idx
-
-def _pivot_lows(low: np.ndarray, L: int) -> List[int]:
-    n = len(low); idx: List[int] = []
-    for i in range(L, n - L):
-        if low[i] == np.min(low[i - L:i + L + 1]):
-            if low[i] < low[i-1] or low[i] < low[i+1]:
-                idx.append(i)
-    return idx
-
-def _liny(x1: int, y1: float, x2: int, y2: float, x: int) -> float:
-    if x2 == x1: return y1
-    t = (x - x1) / float(x2 - x1)
-    return y1 + t * (y2 - y1)
-
-# ----------------- Basic candlestick detectors -----------------
+# ----------------- Candlestick Detectors (existing) -----------------
 def detect_hammer(df: pd.DataFrame, cfg: Dict[str, Any]) -> List[PatternHit]:
     f = _features(df); close = df["Close"]
     down = _is_downtrend(close, cfg["trend_lookback"])
@@ -162,7 +178,7 @@ def detect_engulfing(df: pd.DataFrame, cfg: Dict[str, Any]) -> List[PatternHit]:
     hits: List[PatternHit] = []
     for i in range(1, len(df)):
         o1, c1 = f["o"].iat[i-1], f["c"].iat[i-1]
-        o2, c2 = f["o"].iat[i], f["c"].iat[i]
+        o2, c2 = f["o"].iat[i],   f["c"].iat[i]
         body1 = abs(c1 - o1); body2 = abs(c2 - o2)
         if body2 < cfg["engulfing_min_body_frac"] * med_rng: continue
         if (c2 > o2 and c1 < o1) and (o2 <= c1 and c2 >= o1):
@@ -185,14 +201,12 @@ def detect_morning_evening_star(df: pd.DataFrame, cfg: Dict[str, Any]) -> List[P
     med_rng = _median_range(f)
     hits: List[PatternHit] = []
     for i in range(2, len(df)):
-        # Morning Star
         if bool(down.iat[i-2]) and f["c"].iat[i-2] < f["o"].iat[i-2]:
             if _small_body(f, i-1, med_rng, cfg["star_middle_body_frac"]):
                 mid1 = (f["o"].iat[i-2] + f["c"].iat[i-2]) / 2.0
                 if f["c"].iat[i] > f["o"].iat[i] and f["c"].iat[i] >= mid1:
                     conf = min(1.0, (f["c"].iat[i] - mid1) / max(f["range"].iat[i-2], 1e-12) + 0.5)
                     hits.append(PatternHit("Morning Star", i, [i-2, i-1, i], "bull", float(conf), "Three-bar bullish reversal"))
-        # Evening Star
         if bool(up.iat[i-2]) and f["c"].iat[i-2] > f["o"].iat[i-2]:
             if _small_body(f, i-1, med_rng, cfg["star_middle_body_frac"]):
                 mid1 = (f["o"].iat[i-2] + f["c"].iat[i-2]) / 2.0
@@ -206,7 +220,7 @@ def detect_harami(df: pd.DataFrame, cfg: Dict[str, Any]) -> List[PatternHit]:
     hits: List[PatternHit] = []
     for i in range(1, len(df)):
         o1, c1 = f["o"].iat[i-1], f["c"].iat[i-1]
-        o2, c2 = f["o"].iat[i], f["c"].iat[i]
+        o2, c2 = f["o"].iat[i],   f["c"].iat[i]
         b1_lo, b1_hi = min(o1, c1), max(o1, c1)
         b2_lo, b2_hi = min(o2, c2), max(o2, c2)
         inside = (b2_lo >= b1_lo) and (b2_hi <= b1_hi)
@@ -228,143 +242,416 @@ def detect_tweezer(df: pd.DataFrame, cfg: Dict[str, Any]) -> List[PatternHit]:
             hits.append(PatternHit("Tweezer Bottom", i, [i-1, i], "bull", 0.65, "Similar lows across two bars"))
     return hits
 
-# ----------------- Head & Shoulders -----------------
-def _neckline_points(low: np.ndarray, iL: int, iH: int, iR: int) -> Optional[Tuple[int, float, int, float]]:
-    """Pick troughs between L-H and H-R for neckline."""
-    if iL >= iH or iH >= iR: return None
-    iNL = int(np.argmin(low[iL:iH+1])) + iL
-    iNR = int(np.argmin(low[iH:iR+1])) + iH
-    return (iNL, low[iNL], iNR, low[iNR])
+# ----------------- New: Multi-bar “v2” patterns -----------------
+def _median_tr(feat: pd.DataFrame) -> float:
+    return _median_range(feat)
 
-def _neckline_points_inv(high: np.ndarray, iL: int, iH: int, iR: int) -> Optional[Tuple[int, float, int, float]]:
-    """For inverse H&S, pick peaks between L-H and H-R (neckline above)."""
-    if iL >= iH or iH >= iR: return None
-    iNL = int(np.argmax(high[iL:iH+1])) + iL
-    iNR = int(np.argmax(high[iH:iR+1])) + iH
-    return (iNL, high[iNL], iNR, high[iNR])
-
-def detect_head_shoulders(df: pd.DataFrame, cfg: Dict[str, Any]) -> List[PatternHit]:
-    """Bearish H&S: three pivot highs L<H>R, shoulders ~equal, head prominent; confirm on break below neckline."""
-    h = df["High"].values; l = df["Low"].values; c = df["Close"].values
-    atr = _atr(df, cfg["atr_lookback"]).values
-    L = int(cfg["hs_swing_lookback"])
-    piv = _pivot_highs(h, L)
+def detect_piercing_line(df: pd.DataFrame, cfg: Dict[str, Any]) -> List[PatternHit]:
+    f = _features(df); atr = _atr(df, cfg["atr_lookback"]); med = _median_tr(f)
     hits: List[PatternHit] = []
+    for i in range(1, len(df)):
+        # bar1 long bear
+        long1 = f["body"].iat[i-1] >= cfg["long_body_frac"] * med and f["c"].iat[i-1] < f["o"].iat[i-1]
+        if not long1: continue
+        # gap down open then strong close into body >=50%
+        gap = _gap_down(df, atr, i, cfg["gap_min_atr_mult"])
+        b1_lo, b1_hi = min(f["o"].iat[i-1], f["c"].iat[i-1]), max(f["o"].iat[i-1], f["c"].iat[i-1])
+        mid = (b1_lo + b1_hi) / 2.0
+        cond2 = f["c"].iat[i] > f["o"].iat[i] and f["c"].iat[i] >= mid
+        if cond2 and (gap or f["o"].iat[i] <= b1_lo):
+            pen = (f["c"].iat[i] - b1_lo) / max(b1_hi - b1_lo, 1e-12)
+            hits.append(PatternHit("Piercing Line", i, [i-1, i], "bull", float(min(1.0, 0.5 + pen)), "Gap down then >50% penetration of prior bear body"))
+    return hits
 
-    for a, b, d in zip(piv, piv[1:], piv[2:]):  # consecutive highs as (L,H,R)
-        iL, iH, iR = a, b, d
-        if not (h[iH] > h[iL] and h[iH] > h[iR]):  # head higher
+def detect_dark_cloud(df: pd.DataFrame, cfg: Dict[str, Any]) -> List[PatternHit]:
+    f = _features(df); atr = _atr(df, cfg["atr_lookback"]); med = _median_tr(f)
+    hits: List[PatternHit] = []
+    for i in range(1, len(df)):
+        long1 = f["body"].iat[i-1] >= cfg["long_body_frac"] * med and f["c"].iat[i-1] > f["o"].iat[i-1]
+        if not long1: continue
+        gap = _gap_up(df, atr, i, cfg["gap_min_atr_mult"])
+        b1_lo, b1_hi = min(f["o"].iat[i-1], f["c"].iat[i-1]), max(f["o"].iat[i-1], f["c"].iat[i-1])
+        mid = (b1_lo + b1_hi) / 2.0
+        cond2 = f["c"].iat[i] < f["o"].iat[i] and f["c"].iat[i] <= mid
+        if cond2 and (gap or f["o"].iat[i] >= b1_hi):
+            pen = (b1_hi - f["c"].iat[i]) / max(b1_hi - b1_lo, 1e-12)
+            hits.append(PatternHit("Dark Cloud Cover", i, [i-1, i], "bear", float(min(1.0, 0.5 + pen)), "Gap up then >50% penetration of prior bull body"))
+    return hits
+
+def detect_three_soldiers(df: pd.DataFrame, cfg: Dict[str, Any]) -> List[PatternHit]:
+    f = _features(df)
+    med = _median_range(f)
+    hits: List[PatternHit] = []
+    n = len(df)
+    if n < 3 or med <= 0:
+        return hits
+
+    for i in range(2, n):
+        i0, i1, i2 = i - 2, i - 1, i
+
+        # three bullish bodies
+        if not (f["c"].iat[i0] > f["o"].iat[i0] and
+                f["c"].iat[i1] > f["o"].iat[i1] and
+                f["c"].iat[i2] > f["o"].iat[i2]):
             continue
 
-        # shoulder symmetry (within tol * ATR)
-        shoulder_tol = cfg["hs_shoulders_tol_atr"] * atr[iH]
-        if abs(h[iL] - h[iR]) > max(shoulder_tol, 1e-9):
+        # rising closes
+        if not (f["c"].iat[i0] < f["c"].iat[i1] < f["c"].iat[i2]):
             continue
 
-        # head prominence
-        head_prom = h[iH] - max(h[iL], h[iR])
-        if head_prom < cfg["hs_head_min_prom_atr"] * atr[iH]:
+        # each open within previous real body
+        def _inside_body(j_prev: int, j_cur: int) -> bool:
+            lo, hi = sorted((f["o"].iat[j_prev], f["c"].iat[j_prev]))
+            return lo <= f["o"].iat[j_cur] <= hi
+
+        if not (_inside_body(i0, i1) and _inside_body(i1, i2)):
             continue
 
-        nl = _neckline_points(l, iL, iH, iR)
-        if nl is None: continue
-        n1x, n1y, n2x, n2y = nl
+        # bodies not tiny; wicks not huge (loose defaults)
+        if any(f["body"].iat[j] < 0.30 * med for j in (i0, i1, i2)):
+            continue
+        if any(f["up"].iat[j] > 0.50 * f["range"].iat[j] for j in (i0, i1, i2)):
+            continue
 
-        # confirm break below neckline within window; otherwise mark at R
-        break_idx = iR
-        conf_bonus = 0.0
-        for j in range(iR + 1, min(len(df), iR + 1 + int(cfg["hs_confirm_max_bars"]))):
-            neck_y = _liny(n1x, n1y, n2x, n2y, j)
-            if c[j] < neck_y:
-                break_idx = j
-                conf_bonus = 0.15
-                break
-
-        # confidence from symmetry + prominence (+ bonus if broke neckline)
-        sym = 1.0 - min(1.0, abs(h[iL] - h[iR]) / max(shoulder_tol, 1e-9))
-        prom = min(1.0, head_prom / max(cfg["hs_head_min_prom_atr"] * atr[iH], 1e-9))
-        confidence = max(0.0, min(1.0, 0.5 * sym + 0.5 * prom + conf_bonus))
+        # confidence from total body vs median
+        body_sum = float(f["body"].iloc[i0:i2+1].sum())  # iloc slice (end-exclusive) so +1
+        conf = float(np.clip(0.5 + 0.5 * (body_sum / (3.0 * med)), 0.0, 1.0))
 
         hits.append(PatternHit(
-            name="Head and Shoulders",
-            index=break_idx,
-            bars=[iL, iH, iR],
-            direction="bear",
-            confidence=float(confidence),
-            explanation="Left/Head/Right highs with similar shoulders; neckline break confirms.",
+            "Three White Soldiers", i, [i0, i1, i2], "bull", conf,
+            "Three strong bullish candles with rising closes and opens within prior bodies."
+        ))
+    return hits
+
+def detect_three_crows(df: pd.DataFrame, cfg: Dict[str, Any]) -> List[PatternHit]:
+    f = _features(df)
+    med = _median_range(f)
+    hits: List[PatternHit] = []
+    n = len(df)
+    if n < 3 or med <= 0:
+        return hits
+
+    for i in range(2, n):
+        i0, i1, i2 = i - 2, i - 1, i
+
+        # three bearish bodies
+        if not (f["c"].iat[i0] < f["o"].iat[i0] and
+                f["c"].iat[i1] < f["o"].iat[i1] and
+                f["c"].iat[i2] < f["o"].iat[i2]):
+            continue
+
+        # falling closes
+        if not (f["c"].iat[i0] > f["c"].iat[i1] > f["c"].iat[i2]):
+            continue
+
+        # each open within previous real body
+        def _inside_body(j_prev: int, j_cur: int) -> bool:
+            lo, hi = sorted((f["o"].iat[j_prev], f["c"].iat[j_prev]))
+            return lo <= f["o"].iat[j_cur] <= hi
+
+        if not (_inside_body(i0, i1) and _inside_body(i1, i2)):
+            continue
+
+        if any(f["body"].iat[j] < 0.30 * med for j in (i0, i1, i2)):
+            continue
+        if any(f["dn"].iat[j] > 0.50 * f["range"].iat[j] for j in (i0, i1, i2)):
+            continue
+
+        body_sum = float(f["body"].iloc[i0:i2+1].sum())
+        conf = float(np.clip(0.5 + 0.5 * (body_sum / (3.0 * med)), 0.0, 1.0))
+
+        hits.append(PatternHit(
+            "Three Black Crows", i, [i0, i1, i2], "bear", conf,
+            "Three strong bearish candles with falling closes and opens within prior bodies."
+        ))
+    return hits
+
+def detect_three_inside_up(df: pd.DataFrame, cfg: Dict[str, Any]) -> List[PatternHit]:
+    f = _features(df); hits: List[PatternHit] = []
+    for i in range(2, len(df)):
+        o1, c1 = f["o"].iat[i-2], f["c"].iat[i-2]
+        o2, c2 = f["o"].iat[i-1], f["c"].iat[i-1]
+        o3, c3 = f["o"].iat[i],   f["c"].iat[i]
+        b1_lo, b1_hi = min(o1, c1), max(o1, c1)
+        b2_lo, b2_hi = min(o2, c2), max(o2, c2)
+        inside = (b2_lo >= b1_lo) and (b2_hi <= b1_hi)
+        if c1 < o1 and inside and c3 > o1:
+            hits.append(PatternHit("Three Inside Up", i, [i-2, i-1, i], "bull", 0.7, "Harami down then close above bar1 open"))
+    return hits
+
+def detect_three_inside_down(df: pd.DataFrame, cfg: Dict[str, Any]) -> List[PatternHit]:
+    f = _features(df); hits: List[PatternHit] = []
+    for i in range(2, len(df)):
+        o1, c1 = f["o"].iat[i-2], f["c"].iat[i-2]
+        o2, c2 = f["o"].iat[i-1], f["c"].iat[i-1]
+        o3, c3 = f["o"].iat[i],   f["c"].iat[i]
+        b1_lo, b1_hi = min(o1, c1), max(o1, c1)
+        b2_lo, b2_hi = min(o2, c2), max(o2, c2)
+        inside = (b2_lo >= b1_lo) and (b2_hi <= b1_hi)
+        if c1 > o1 and inside and c3 < o1:
+            hits.append(PatternHit("Three Inside Down", i, [i-2, i-1, i], "bear", 0.7, "Harami up then close below bar1 open"))
+    return hits
+
+def detect_three_outside_up(df: pd.DataFrame, cfg: Dict[str, Any]) -> List[PatternHit]:
+    f = _features(df); hits: List[PatternHit] = []
+    for i in range(2, len(df)):
+        o1, c1 = f["o"].iat[i-2], f["c"].iat[i-2]
+        o2, c2 = f["o"].iat[i-1], f["c"].iat[i-1]
+        if (c2 > o2 and c1 < o1) and (o2 <= c1 and c2 >= o1) and (f["c"].iat[i] > f["c"].iat[i-1]):
+            hits.append(PatternHit("Three Outside Up", i, [i-2, i-1, i], "bull", 0.75, "Bullish engulf then continuation up"))
+    return hits
+
+def detect_three_outside_down(df: pd.DataFrame, cfg: Dict[str, Any]) -> List[PatternHit]:
+    f = _features(df); hits: List[PatternHit] = []
+    for i in range(2, len(df)):
+        o1, c1 = f["o"].iat[i-2], f["c"].iat[i-2]
+        o2, c2 = f["o"].iat[i-1], f["c"].iat[i-1]
+        if (c2 < o2 and c1 > o1) and (o2 >= c1 and c2 <= o1) and (f["c"].iat[i] < f["c"].iat[i-1]):
+            hits.append(PatternHit("Three Outside Down", i, [i-2, i-1, i], "bear", 0.75, "Bearish engulf then continuation down"))
+    return hits
+
+def detect_marubozu(df: pd.DataFrame, cfg: Dict[str, Any]) -> List[PatternHit]:
+    f = _features(df); hits: List[PatternHit] = []
+    for i in range(len(df)):
+        rng = f["range"].iat[i]
+        if rng <= 0: continue
+        body_frac = f["body"].iat[i] / rng
+        up_frac = f["up"].iat[i] / rng
+        dn_frac = f["dn"].iat[i] / rng
+        if body_frac >= cfg["maru_min_body_frac"] and up_frac <= cfg["maru_max_wick_frac"] and dn_frac <= cfg["maru_max_wick_frac"]:
+            if f["c"].iat[i] > f["o"].iat[i]:
+                hits.append(PatternHit("Marubozu", i, [i], "bull", float(min(1.0, body_frac)), "Full-body bullish (tiny wicks)"))
+            else:
+                hits.append(PatternHit("Marubozu", i, [i], "bear", float(min(1.0, body_frac)), "Full-body bearish (tiny wicks)"))
+    return hits
+
+def detect_windows(df: pd.DataFrame, cfg: Dict[str, Any]) -> List[PatternHit]:
+    atr = _atr(df, cfg["atr_lookback"]); hits: List[PatternHit] = []
+    for i in range(1, len(df)):
+        if _gap_up(df, atr, i, cfg["window_gap_min_atr"]):
+            hits.append(PatternHit("Rising Window", i, [i-1, i], "bull", 0.7, "Gap up (window)"))
+        if _gap_down(df, atr, i, cfg["window_gap_min_atr"]):
+            hits.append(PatternHit("Falling Window", i, [i-1, i], "bear", 0.7, "Gap down (window)"))
+    return hits
+
+def detect_tasuki_up(df: pd.DataFrame, cfg: Dict[str, Any]) -> List[PatternHit]:
+    f = _features(df); atr = _atr(df, cfg["atr_lookback"]); hits: List[PatternHit] = []
+    for i in range(2, len(df)):
+        if not _gap_up(df, atr, i-2, cfg["tasuki_gap_min_atr"]): continue
+        cond1 = f["c"].iat[i-1] < f["o"].iat[i-1] and df["Low"].iat[i-1] > df["High"].iat[i-2]
+        cond2 = f["c"].iat[i]   < f["o"].iat[i]   and df["Low"].iat[i]   > df["High"].iat[i-2]
+        if cond1 and cond2:
+            hits.append(PatternHit("Tasuki Up", i, [i-2, i-1, i], "bull", 0.65, "Up gap then two small pullbacks not closing gap"))
+    return hits
+
+def detect_tasuki_down(df: pd.DataFrame, cfg: Dict[str, Any]) -> List[PatternHit]:
+    f = _features(df); atr = _atr(df, cfg["atr_lookback"]); hits: List[PatternHit] = []
+    for i in range(2, len(df)):
+        if not _gap_down(df, atr, i-2, cfg["tasuki_gap_min_atr"]): continue
+        cond1 = f["c"].iat[i-1] > f["o"].iat[i-1] and df["High"].iat[i-1] < df["Low"].iat[i-2]
+        cond2 = f["c"].iat[i]   > f["o"].iat[i]   and df["High"].iat[i]   < df["Low"].iat[i-2]
+        if cond1 and cond2:
+            hits.append(PatternHit("Tasuki Down", i, [i-2, i-1, i], "bear", 0.65, "Down gap then two small pullbacks not closing gap"))
+    return hits
+
+def detect_kicker_bull(df: pd.DataFrame, cfg: Dict[str, Any]) -> List[PatternHit]:
+    f = _features(df); atr = _atr(df, cfg["atr_lookback"]); hits: List[PatternHit] = []
+    for i in range(1, len(df)):
+        gap = _gap_up(df, atr, i, cfg["kicker_gap_min_atr"])
+        if f["c"].iat[i-1] < f["o"].iat[i-1] and gap and f["c"].iat[i] > f["o"].iat[i]:
+            hits.append(PatternHit("Kicker Bull", i, [i-1, i], "bull", 0.75, "Sharp bullish gap reversing prior down bar"))
+    return hits
+
+def detect_kicker_bear(df: pd.DataFrame, cfg: Dict[str, Any]) -> List[PatternHit]:
+    f = _features(df); atr = _atr(df, cfg["atr_lookback"]); hits: List[PatternHit] = []
+    for i in range(1, len(df)):
+        gap = _gap_down(df, atr, i, cfg["kicker_gap_min_atr"])
+        if f["c"].iat[i-1] > f["o"].iat[i-1] and gap and f["c"].iat[i] < f["o"].iat[i]:
+            hits.append(PatternHit("Kicker Bear", i, [i-1, i], "bear", 0.75, "Sharp bearish gap reversing prior up bar"))
+    return hits
+
+def detect_rising_three_methods(df: pd.DataFrame, cfg: Dict[str, Any]) -> List[PatternHit]:
+    f = _features(df); med = _median_tr(f); nmid = int(cfg["methods_n_bars"])
+    hits: List[PatternHit] = []
+    for i in range(3 + nmid - 1, len(df)):
+        b1 = i - (nmid + 1)
+        bN = i
+        if not (f["c"].iat[b1] > f["o"].iat[b1] and f["body"].iat[b1] >= cfg["long_body_frac"] * med): continue
+        b1_lo, b1_hi = min(f["o"].iat[b1], f["c"].iat[b1]), max(f["o"].iat[b1], f["c"].iat[b1])
+        ok_mid = True
+        for k in range(b1+1, b1+1+nmid):
+            small = f["body"].iat[k] <= cfg["methods_pullback_small"] * (f["range"].iat[b1])
+            if not (f["c"].iat[k] < f["o"].iat[k] and small and f["h"].iat[k] <= b1_hi and f["l"].iat[k] >= b1_lo):
+                ok_mid = False; break
+        if not ok_mid: continue
+        if f["c"].iat[bN] > b1_hi:
+            hits.append(PatternHit("Rising Three Methods", bN, list(range(b1, bN+1)), "bull", 0.75, "Strong up bar, small down bars inside, then breakout up"))
+    return hits
+
+def detect_falling_three_methods(df: pd.DataFrame, cfg: Dict[str, Any]) -> List[PatternHit]:
+    f = _features(df); med = _median_tr(f); nmid = int(cfg["methods_n_bars"])
+    hits: List[PatternHit] = []
+    for i in range(3 + nmid - 1, len(df)):
+        b1 = i - (nmid + 1)
+        bN = i
+        if not (f["c"].iat[b1] < f["o"].iat[b1] and f["body"].iat[b1] >= cfg["long_body_frac"] * med): continue
+        b1_lo, b1_hi = min(f["o"].iat[b1], f["c"].iat[b1]), max(f["o"].iat[b1], f["c"].iat[b1])
+        ok_mid = True
+        for k in range(b1+1, b1+1+nmid):
+            small = f["body"].iat[k] <= cfg["methods_pullback_small"] * (f["range"].iat[b1])
+            if not (f["c"].iat[k] > f["o"].iat[k] and small and f["h"].iat[k] <= b1_hi and f["l"].iat[k] >= b1_lo):
+                ok_mid = False; break
+        if not ok_mid: continue
+        if f["c"].iat[bN] < b1_lo:
+            hits.append(PatternHit("Falling Three Methods", bN, list(range(b1, bN+1)), "bear", 0.75, "Strong down bar, small up bars inside, then breakout down"))
+    return hits
+
+def detect_mat_hold(df: pd.DataFrame, cfg: Dict[str, Any]) -> List[PatternHit]:
+    f = _features(df); med = _median_tr(f); hits: List[PatternHit] = []
+    nmid = 3
+    for i in range(4, len(df)):
+        b1 = i - 4
+        if f["c"].iat[b1] > f["o"].iat[b1] and f["body"].iat[b1] >= cfg["long_body_frac"] * med:
+            ok_mid = True
+            for k in range(b1+1, b1+1+nmid):
+                if f["body"].iat[k] > cfg["methods_pullback_small"] * (f["range"].iat[b1]):
+                    ok_mid = False; break
+            if ok_mid and f["c"].iat[i] > max(f["o"].iat[b1], f["c"].iat[b1]):
+                hits.append(PatternHit("Mat Hold", i, list(range(b1, i+1)), "bull", 0.7, "Bullish mat hold continuation"))
+    return hits
+
+# ----------------- Head & Shoulders helpers & detectors -----------------
+def _pivot_highs_lows(df: pd.DataFrame, swing: int) -> Tuple[List[Tuple[int, float]], List[Tuple[int, float]]]:
+    H = df["High"].values; L = df["Low"].values; n = len(df)
+    ph: List[Tuple[int, float]] = []; pl: List[Tuple[int, float]] = []
+    left = swing; right = swing
+    for i in range(left, n - right):
+        segH = H[i - left : i + right + 1]
+        segL = L[i - left : i + right + 1]
+        if H[i] == segH.max() and np.isfinite(H[i]): ph.append((i, H[i]))
+        if L[i] == segL.min() and np.isfinite(L[i]): pl.append((i, L[i]))
+    return ph, pl
+
+def _first_low_between(pl: List[Tuple[int, float]], i1: int, i2: int) -> Optional[Tuple[int, float]]:
+    cands = [p for p in pl if i1 < p[0] < i2]
+    if not cands: return None
+    return min(cands, key=lambda x: x[1])
+
+def _first_high_between(ph: List[Tuple[int, float]], i1: int, i2: int) -> Optional[Tuple[int, float]]:
+    cands = [p for p in ph if i1 < p[0] < i2]
+    if not cands: return None
+    return max(cands, key=lambda x: x[1])
+
+def _neckline_y(i_left: int, y_left: float, i_right: int, y_right: float, i: int) -> float:
+    if i_right == i_left: return y_left
+    t = (i - i_left) / float(i_right - i_left)
+    return y_left + t * (y_right - y_left)
+
+def _conf_hs(h1: float, h2: float, h3: float, shoulder_tol: float, head_min_diff: float, break_amt_atr: float) -> float:
+    sh_dev = abs(h1 - h3) / max(h1, h3)
+    sh_score = max(0.0, 1.0 - (sh_dev / max(shoulder_tol, 1e-9)))
+    head_ratio = (h2 / max(h1, h3)) - 1.0
+    head_score = max(0.0, min(1.0, head_ratio / max(head_min_diff, 1e-9)))
+    brk_score = max(0.0, min(1.0, break_amt_atr))
+    return float(np.clip(0.2 * sh_score + 0.6 * head_score + 0.2 * brk_score, 0, 1))
+
+def _conf_inverse_hs(l1: float, l2: float, l3: float, shoulder_tol: float, head_min_diff: float, break_amt_atr: float) -> float:
+    sh_dev = abs(l1 - l3) / max(l1, l3)
+    sh_score = max(0.0, 1.0 - (sh_dev / max(shoulder_tol, 1e-9)))
+    head_ratio = (min(l1, l3) / max(l2, 1e-9)) - 1.0
+    head_score = max(0.0, min(1.0, head_ratio / max(head_min_diff, 1e-9)))
+    brk_score = max(0.0, min(1.0, break_amt_atr))
+    return float(np.clip(0.2 * sh_score + 0.6 * head_score + 0.2 * brk_score, 0, 1))
+
+def detect_head_shoulders(df: pd.DataFrame, cfg: Dict[str, Any]) -> List[PatternHit]:
+    swing = int(cfg.get("hs_swing", 3))
+    min_sep = int(cfg.get("hs_min_separation", 6))
+    shoulder_tol = float(cfg.get("hs_shoulder_tol", 0.03))
+    head_min_diff = float(cfg.get("hs_head_min_diff", 0.03))
+    look = int(cfg.get("hs_confirm_lookahead", 25))
+    buf_mult = float(cfg.get("hs_neckline_buffer_atr_mult", 0.05))
+
+    ph, pl = _pivot_highs_lows(df, swing)
+    atr = _atr(df, cfg["atr_lookback"]).values
+    close = df["Close"].values
+
+    hits: List[PatternHit] = []
+    for a in range(len(ph) - 2):
+        i1, h1 = ph[a]; i2, h2 = ph[a + 1]; i3, h3 = ph[a + 2]
+        if not (i1 < i2 < i3): continue
+        if (i2 - i1) < min_sep or (i3 - i2) < min_sep: continue
+        low1 = _first_low_between(pl, i1, i2)
+        low2 = _first_low_between(pl, i2, i3)
+        if not low1 or not low2: continue
+        j1, nl1 = low1; j2, nl2 = low2
+        if h2 < max(h1, h3) * (1.0 + head_min_diff): continue
+        if abs(h1 - h3) / max(h1, h3) > shoulder_tol: continue
+        break_index: Optional[int] = None
+        for j in range(i3 + 1, min(i3 + 1 + look, len(df))):
+            nl = _neckline_y(j1, nl1, j2, nl2, j)
+            margin = atr[j] * buf_mult
+            if close[j] < (nl - margin):
+                break_index = j; break
+        if break_index is None: continue
+        nl = _neckline_y(j1, nl1, j2, nl2, break_index)
+        break_amt_atr = float((nl - close[break_index]) / max(atr[break_index], 1e-9))
+        conf = _conf_hs(h1, h2, h3, shoulder_tol, head_min_diff, break_amt_atr)
+        hits.append(PatternHit(
+            "Head & Shoulders",
+            int(break_index),
+            [int(i1), int(j1), int(i2), int(j2), int(i3), int(break_index)],
+            "bear",
+            float(np.clip(conf, 0, 1)),
+            "Three-peak pattern with higher middle head; neckline break down."
         ))
     return hits
 
 def detect_inverse_head_shoulders(df: pd.DataFrame, cfg: Dict[str, Any]) -> List[PatternHit]:
-    """Bullish inverse H&S using pivot lows and break above neckline."""
-    h = df["High"].values; l = df["Low"].values; c = df["Close"].values
+    swing = int(cfg.get("hs_swing", 3))
+    min_sep = int(cfg.get("hs_min_separation", 6))
+    shoulder_tol = float(cfg.get("hs_shoulder_tol", 0.03))
+    head_min_diff = float(cfg.get("hs_head_min_diff", 0.03))
+    look = int(cfg.get("hs_confirm_lookahead", 25))
+    buf_mult = float(cfg.get("hs_neckline_buffer_atr_mult", 0.05))
+
+    ph, pl = _pivot_highs_lows(df, swing)
     atr = _atr(df, cfg["atr_lookback"]).values
-    L = int(cfg["hs_swing_lookback"])
-    piv = _pivot_lows(l, L)
+    close = df["Close"].values
+
     hits: List[PatternHit] = []
-
-    for a, b, d in zip(piv, piv[1:], piv[2:]):  # (L,H,R) but for lows, H is the deepest head
-        iL, iH, iR = a, b, d
-        if not (l[iH] < l[iL] and l[iH] < l[iR]):  # head lower (deeper)
-            continue
-
-        shoulder_tol = cfg["hs_shoulders_tol_atr"] * atr[iH]
-        if abs(l[iL] - l[iR]) > max(shoulder_tol, 1e-9):
-            continue
-
-        head_prom = min(l[iL], l[iR]) - l[iH]  # depth vs shoulders
-        if head_prom < cfg["hs_head_min_prom_atr"] * atr[iH]:
-            continue
-
-        nl = _neckline_points_inv(h, iL, iH, iR)
-        if nl is None: continue
-        n1x, n1y, n2x, n2y = nl
-
-        break_idx = iR
-        conf_bonus = 0.0
-        for j in range(iR + 1, min(len(df), iR + 1 + int(cfg["hs_confirm_max_bars"]))):
-            neck_y = _liny(n1x, n1y, n2x, n2y, j)
-            if c[j] > neck_y:
-                break_idx = j
-                conf_bonus = 0.15
-                break
-
-        sym = 1.0 - min(1.0, abs(l[iL] - l[iR]) / max(shoulder_tol, 1e-9))
-        prom = min(1.0, head_prom / max(cfg["hs_head_min_prom_atr"] * atr[iH], 1e-9))
-        confidence = max(0.0, min(1.0, 0.5 * sym + 0.5 * prom + conf_bonus))
-
+    for a in range(len(pl) - 2):
+        i1, l1 = pl[a]; i2, l2 = pl[a + 1]; i3, l3 = pl[a + 2]
+        if not (i1 < i2 < i3): continue
+        if (i2 - i1) < min_sep or (i3 - i2) < min_sep: continue
+        hi1 = _first_high_between(ph, i1, i2)
+        hi2 = _first_high_between(ph, i2, i3)
+        if not hi1 or not hi2: continue
+        j1, nh1 = hi1; j2, nh2 = hi2
+        if l2 > min(l1, l3) * (1.0 - head_min_diff): continue
+        if abs(l1 - l3) / max(l1, l3) > shoulder_tol: continue
+        break_index: Optional[int] = None
+        for j in range(i3 + 1, min(i3 + 1 + look, len(df))):
+            nl = _neckline_y(j1, nh1, j2, nh2, j)
+            margin = atr[j] * buf_mult
+            if close[j] > (nl + margin):
+                break_index = j; break
+        if break_index is None: continue
+        nl = _neckline_y(j1, nh1, j2, nh2, break_index)
+        break_amt_atr = float((close[break_index] - nl) / max(atr[break_index], 1e-9))
+        conf = _conf_inverse_hs(l1, l2, l3, shoulder_tol, head_min_diff, break_amt_atr)
         hits.append(PatternHit(
-            name="Inverse Head and Shoulders",
-            index=break_idx,
-            bars=[iL, iH, iR],
-            direction="bull",
-            confidence=float(confidence),
-            explanation="Left/Head/Right lows with similar shoulders; neckline break confirms.",
+            "Inverse Head & Shoulders",
+            int(break_index),
+            [int(i1), int(j1), int(i2), int(j2), int(i3), int(break_index)],
+            "bull",
+            float(np.clip(conf, 0, 1)),
+            "Three-trough pattern with lower middle head; neckline break up."
         ))
     return hits
 
-# ---- Stubs (placeholders for v2; return [] for now) ----
-def detect_piercing_line(df, cfg): return []
-def detect_dark_cloud(df, cfg): return []
-def detect_three_soldiers(df, cfg): return []
-def detect_three_crows(df, cfg): return []
-def detect_three_inside_up(df, cfg): return []
-def detect_three_inside_down(df, cfg): return []
-def detect_three_outside_up(df, cfg): return []
-def detect_three_outside_down(df, cfg): return []
-def detect_marubozu(df, cfg): return []
-def detect_windows(df, cfg): return []
-def detect_tasuki_up(df, cfg): return []
-def detect_tasuki_down(df, cfg): return []
-def detect_kicker_bull(df, cfg): return []
-def detect_kicker_bear(df, cfg): return []
-def detect_rising_three_methods(df, cfg): return []
-def detect_falling_three_methods(df, cfg): return []
-def detect_mat_hold(df, cfg): return []
-
 # ----------------- Registry -----------------
 RULES: Dict[str, Tuple[str, callable]] = {
-    # simple
+    # Single/dual-bar
     "Hammer": ("bull", detect_hammer),
     "Inverted Hammer": ("bull", detect_inverted_hammer),
     "Bullish Engulfing": ("bull", detect_engulfing),
@@ -377,11 +664,7 @@ RULES: Dict[str, Tuple[str, callable]] = {
     "Tweezer Top": ("bear", detect_tweezer),
     "Tweezer Bottom": ("bull", detect_tweezer),
 
-    # new
-    "Head and Shoulders": ("bear", detect_head_shoulders),
-    "Inverse Head and Shoulders": ("bull", detect_inverse_head_shoulders),
-
-    # stubs
+    # Multi-bar (new)
     "Piercing Line": ("bull", detect_piercing_line),
     "Dark Cloud Cover": ("bear", detect_dark_cloud),
     "Three White Soldiers": ("bull", detect_three_soldiers),
@@ -400,6 +683,10 @@ RULES: Dict[str, Tuple[str, callable]] = {
     "Rising Three Methods": ("bull", detect_rising_three_methods),
     "Falling Three Methods": ("bear", detect_falling_three_methods),
     "Mat Hold": ("bull", detect_mat_hold),
+
+    # Structures
+    "Head & Shoulders": ("bear", detect_head_shoulders),
+    "Inverse Head & Shoulders": ("bull", detect_inverse_head_shoulders),
 }
 
 # ----------------- Orchestrator -----------------
@@ -409,29 +696,35 @@ def detect_all(df: pd.DataFrame, enabled: Iterable[str], cfg: Dict[str, Any]) ->
     for name, (_, fn) in RULES.items():
         if name not in enabled:
             continue
-        hits = fn(df, cfg) or []
+        try:
+            hits = fn(df, cfg) or []
+        except Exception:
+            # swallow per-rule errors to keep the console clean during experimentation
+            continue
         for h in hits:
             if h.name == name:
                 out.append(h)
     return out
 
-# ----------------- Markers conversion (to your frontend shape) -----------------
+# ----------------- Markers conversion -----------------
 def hits_to_markers(hits: List[PatternHit], df: pd.DataFrame):
     markers = []
     for h in hits:
         i = h.index
-        t = int(df.index[i].timestamp())
+        ts = int(df.index[i].timestamp())
         if h.direction == "bear":
-            side = "above"; price = float(df["High"].iat[i]); color = "#ef5350"
+            price = float(df["High"].iat[i]); side = "above"
         elif h.direction == "bull":
-            side = "below"; price = float(df["Low"].iat[i]); color = "#26a69a"
+            price = float(df["Low"].iat[i]); side = "below"
         else:
-            side = "above"; price = float(df["Close"].iat[i]); color = "#60a5fa"
+            price = float(df["Close"].iat[i]); side = "inBar"
+        color = "#ef5350" if h.direction == "bear" else ("#26a69a" if h.direction == "bull" else "#60a5fa")
+        label = f"{h.name} ({h.confidence:.2f})"
         markers.append({
-            "time": t,
+            "time": ts,
             "price": price,
-            "side": side,                 # "above" | "below"
+            "side": side,
             "color": color,
-            "label": f"{h.name} ({h.confidence:.2f})",
+            "label": label,
         })
     return markers

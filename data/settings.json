@@ -1,0 +1,101 @@
+{
+  "watchlist": [
+    {
+      "symbol": "=xau",
+      "asset": "stock",
+      "timeframe": "5m",
+      "adapter": "yfinance",
+      "enabled": true
+    },
+    {
+      "symbol": "=XAG",
+      "asset": "stock",
+      "timeframe": "1m",
+      "adapter": "csv",
+      "enabled": true
+    },
+    {
+      "symbol": "BTC-USD",
+      "asset": "crypto",
+      "timeframe": "15m",
+      "adapter": "yfinance",
+      "enabled": true
+    }
+  ],
+  "strategies": {
+    "enabled": {
+      "EMA20/50 Pullback": {
+        "enabled": true,
+        "params": {},
+        "approved": true
+      },
+      "MACD Trend": {
+        "enabled": true,
+        "params": {},
+        "approved": true
+      },
+      "Range Breakout": {
+        "enabled": true,
+        "params": {
+          "lookback": 20,
+          "retest": 5
+        },
+        "approved": true
+      },
+      "Bullish Engulfing": {
+        "enabled": true,
+        "params": {},
+        "approved": true
+      },
+      "Bearish Engulfing": {
+        "enabled": true,
+        "params": {},
+        "approved": true
+      },
+      "Hammer": {
+        "enabled": true,
+        "params": {},
+        "approved": true
+      },
+      "Inverted Hammer": {
+        "enabled": true,
+        "params": {},
+        "approved": true
+      },
+      "Hanging Man": {
+        "enabled": true,
+        "params": {},
+        "approved": true
+      },
+      "Shooting Star": {
+        "enabled": true,
+        "params": {},
+        "approved": true
+      },
+      "Tweezer Top": {
+        "enabled": true,
+        "params": {},
+        "approved": true
+      },
+      "Tweezer Bottom": {
+        "enabled": true,
+        "params": {},
+        "approved": true
+      }
+    },
+    "big_boss": {
+      "enabled": true,
+      "k_bars": 3,
+      "tol": 0.0033999999999999994
+    }
+  },
+  "risk": {
+    "equity": 10000.01,
+    "risk_pct": 10.0,
+    "atr_mult_sl": 1.5,
+    "rr": 2.0,
+    "tp_count": 2,
+    "cooldown_min": 15,
+    "max_positions": 6
+  }
+}

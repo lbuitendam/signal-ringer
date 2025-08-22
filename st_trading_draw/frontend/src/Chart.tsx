@@ -22,11 +22,9 @@ export interface ChartProps {
   activeTool: string | null;
   magnet: boolean;
   toolbarKey: string;
-
   overlays?: OverlaySeriesLine[];
-  onReady?: (api: IChartApi) => void;
-
   markers?: Marker[];
+  onReady?: (api: IChartApi) => void;
 }
 
 export function Chart({
@@ -44,12 +42,17 @@ export function Chart({
   const overlayRef = useRef<HTMLCanvasElement>(null);
 
   const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<any>(null);
+  const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const normDataRef = useRef<CandlestickData[]>([]);
   const overlaySeriesMap = useRef<Map<string, ISeriesApi<"Line">>>(new Map());
 
   const [draft, setDraft] = useState<Anchor[]>([]);
+  const [hover, setHover] = useState<Anchor | null>(null);
 
+  // Control: draw labels on pattern markers on the canvas?
+  const DRAW_MARKER_LABELS = false;
+
+  // ---- helpers ----
   function toLWTime(t: number | string): number {
     if (typeof t === "number") return t > 1e12 ? Math.floor(t / 1000) : Math.floor(t);
     const ms = Date.parse(t);
@@ -79,6 +82,79 @@ export function Chart({
     return out;
   }
 
+  function findNearestIndexByTime(t: number): number {
+    const arr = normDataRef.current;
+    if (!arr.length) return 0;
+    let lo = 0,
+      hi = arr.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if ((arr[mid].time as number) < t) lo = mid + 1;
+      else hi = mid;
+    }
+    const i = lo;
+    if (i === 0) return 0;
+    const t0 = arr[i - 1].time as number;
+    const t1 = arr[i].time as number;
+    return Math.abs(t - t0) <= Math.abs(t1 - t) ? i - 1 : i;
+  }
+
+  function snapAnchor(time: number, price: number): Anchor {
+    const arr = normDataRef.current;
+    if (!arr.length) return { time, price };
+    const i = findNearestIndexByTime(time);
+    const c = arr[i];
+    const candidates = [c.open, c.high, c.low, c.close];
+    let best = candidates[0],
+      bd = Math.abs(price - candidates[0]);
+    for (let k = 1; k < candidates.length; k++) {
+      const d = Math.abs(price - candidates[k]);
+      if (d < bd) {
+        bd = d;
+        best = candidates[k];
+      }
+    }
+    return { time: c.time as number, price: best };
+  }
+
+  // === Stable coordinate: prefer logical index -> x, price -> y ===
+  function xyAt(time: number, price: number) {
+    const chart = chartRef.current;
+    const s = seriesRef.current;
+    const arr = normDataRef.current;
+    if (!chart || !s || !arr.length) return null;
+
+    const i = findNearestIndexByTime(time);
+    const ts: any = chart.timeScale();
+
+    const x =
+      typeof ts.logicalToCoordinate === "function"
+        ? (ts.logicalToCoordinate(i) as number | null)
+        : (ts.timeToCoordinate(arr[i].time as number) as number | null);
+
+    if (x == null) return null;
+
+    const y = s.priceToCoordinate(price) ?? null;
+    if (y == null) return null;
+
+    return { x, y, i };
+  }
+
+  function toXY(a: Anchor) {
+    return xyAt(a.time, a.price);
+  }
+
+  // Batch paints
+  let raf: number | null = null;
+  function scheduleDraw() {
+    if (raf != null) return;
+    raf = requestAnimationFrame(() => {
+      raf = null;
+      drawAll();
+    });
+  }
+
+  // ---- mount main chart ----
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -108,7 +184,7 @@ export function Chart({
     seriesRef.current = s;
     onReady?.(chart);
 
-    // overlay canvas
+    // overlay canvas sizing
     const overlay = overlayRef.current;
     const sizeOverlay = () => {
       if (!overlay || !el) return;
@@ -126,13 +202,13 @@ export function Chart({
     const ro = new ResizeObserver(() => {
       chart.applyOptions({ width: el.clientWidth, height: el.clientHeight || 520 });
       sizeOverlay();
-      drawAll();
+      scheduleDraw();
     });
     ro.observe(el);
 
     const onRangeChange = () => {
       sizeOverlay();
-      drawAll();
+      scheduleDraw();
     };
     chart.timeScale().subscribeVisibleTimeRangeChange(onRangeChange);
     const tsAny = chart.timeScale() as any;
@@ -141,7 +217,17 @@ export function Chart({
       typeof tsAny.unsubscribeVisibleLogicalRangeChange === "function";
     if (hasLogical) tsAny.subscribeVisibleLogicalRangeChange(onRangeChange);
 
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setDraft([]);
+        setHover(null);
+        scheduleDraw();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+
     return () => {
+      window.removeEventListener("keydown", onKey);
       ro.disconnect();
       chart.timeScale().unsubscribeVisibleTimeRangeChange(onRangeChange);
       if (hasLogical) tsAny.unsubscribeVisibleLogicalRangeChange(onRangeChange);
@@ -155,6 +241,7 @@ export function Chart({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ---- candles update ----
   useEffect(() => {
     const s = seriesRef.current;
     if (!s) return;
@@ -162,15 +249,14 @@ export function Chart({
     if (!norm.length) return;
     normDataRef.current = norm;
     s.setData(norm);
-    drawAll();
+    scheduleDraw();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
+  // ---- overlays update ----
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
-
-    // remove missing
     const nextIds = new Set(overlays.map((o) => o.id));
     for (const [id, s] of overlaySeriesMap.current) {
       if (!nextIds.has(id)) {
@@ -178,11 +264,9 @@ export function Chart({
         overlaySeriesMap.current.delete(id);
       }
     }
-
     for (const o of overlays) {
       const lw = Math.max(1, Math.round((o.width ?? 2) as number)) as any;
       const ls = (o.dash === "dash" ? 1 : o.dash === "dot" ? 2 : 0) as any;
-
       let line = overlaySeriesMap.current.get(o.id);
       if (!line) {
         line = chart.addLineSeries({
@@ -193,23 +277,24 @@ export function Chart({
         });
         overlaySeriesMap.current.set(o.id, line);
       } else {
-        line.applyOptions({
-          color: o.color || "#33cccc",
-          lineWidth: lw as any,
-          lineStyle: ls,
-        } as any);
+        line.applyOptions({ color: o.color || "#33cccc", lineWidth: lw as any, lineStyle: ls } as any);
       }
-
       const lineData = (o.data || [])
         .filter((r) => r && r.time != null && Number.isFinite(r.value))
         .map((r) => ({ time: toLWTime(r.time) as UTCTimestamp, value: +r.value }))
         .sort((a, b) => (a.time as number) - (b.time as number));
       if (lineData.length) line.setData(lineData);
     }
-
-    drawAll();
+    scheduleDraw();
   }, [overlays]);
 
+  // ---- markers changed ----
+  useEffect(() => {
+    scheduleDraw();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [markers]);
+
+  // ---- drawing mode toggles ----
   useEffect(() => {
     const overlay = overlayRef.current;
     const chart = chartRef.current as any;
@@ -230,32 +315,6 @@ export function Chart({
     }
   }, [activeTool]);
 
-  function toXY(a: Anchor) {
-    const chart = chartRef.current;
-    const s = seriesRef.current;
-    if (!chart || !s) return null;
-    const x = chart.timeScale().timeToCoordinate(unix(a.time));
-    if (x == null) return null;
-    const y = s.priceToCoordinate(a.price) ?? null;
-    if (y == null) return null;
-    return { x, y };
-  }
-
-  function nearestCandle(time: number, price: number): Anchor {
-    const arr = normDataRef.current;
-    if (!arr.length) return { time, price };
-    let idx = 0,
-      best = Number.POSITIVE_INFINITY;
-    for (let i = 0; i < arr.length; i++) {
-      const diff = Math.abs((arr[i].time as number) - time);
-      if (diff < best) {
-        best = diff;
-        idx = i;
-      }
-    }
-    return { time: arr[idx].time as number, price };
-  }
-
   function addDrawing(d: Drawing) {
     const copy = { ...drawings, [d.id]: d };
     setDrawings(copy);
@@ -264,55 +323,32 @@ export function Chart({
     } catch {}
   }
 
-  // helpers for markers
-  function findCandleAt(ts: number): CandlestickData | null {
+  function getPriceForMarker(m: Marker): number | null {
+    const t = typeof m.time === "string" ? toLWTime(m.time) : (m.time as number);
     const arr = normDataRef.current;
     if (!arr.length) return null;
-    // binary search would be nicer; linear is fine for now
-    for (let i = 0; i < arr.length; i++) {
-      if ((arr[i].time as number) === ts) return arr[i];
-    }
-    return null;
+    const i = findNearestIndexByTime(t);
+    const bar = arr[i];
+    if (!bar) return null;
+
+    if (typeof m.price === "number" && Number.isFinite(m.price)) return m.price;
+
+    const pos =
+      m.side ??
+      (m.position === "aboveBar" ? "above" : m.position === "belowBar" ? "below" : "inBar");
+    if (pos === "above") return bar.high;
+    if (pos === "below") return bar.low;
+    return bar.close;
   }
 
-  function normalizeMarker(m: Marker): { x: number | null; y: number | null; side: "above" | "below" | "inBar"; color: string; label?: string } {
-    const chart = chartRef.current;
-    const s = seriesRef.current;
-    if (!chart || !s) return { x: null, y: null, side: "inBar", color: "#60a5fa" };
-
-    const ts = toLWTime(m.time);
-    const candle = findCandleAt(ts);
-    let side: "above" | "below" | "inBar" =
-      m.side || (m.position === "aboveBar" ? "above" : m.position === "belowBar" ? "below" : "inBar");
-
-    // pick a price if absent
-    let price =
-      typeof m.price === "number"
-        ? m.price
-        : candle
-        ? side === "above"
-          ? (candle.high as number)
-          : side === "below"
-          ? (candle.low as number)
-          : (candle.close as number)
-        : NaN;
-
-    const x = chart.timeScale().timeToCoordinate(ts as UTCTimestamp);
-    const y = s.priceToCoordinate(price);
-
-    const color =
-      m.color || (side === "above" ? "#ef5350" : side === "below" ? "#26a69a" : "#60a5fa");
-
-    return { x: x ?? null, y: y ?? null, side, color, label: m.label };
-  }
-
+  // ---- overlay canvas paint: drawings + previews + markers ----
   function drawAll() {
     const canvas = overlayRef.current,
       chart = chartRef.current,
       s = seriesRef.current;
     if (!canvas || !chart || !s) return;
-    const ctx = canvas.getContext("2d")!,
-      rect = canvas.getBoundingClientRect();
+    const ctx = canvas.getContext("2d")!;
+    const rect = canvas.getBoundingClientRect();
     ctx.clearRect(0, 0, rect.width, rect.height);
 
     // drawings
@@ -407,41 +443,96 @@ export function Chart({
           ctx.fillText(`${(lv.level * 100).toFixed(1)}%  ${lv.price.toFixed(4)}`, Rp.x + 6, Rp.y - 2);
         }
       }
+
+      // small anchors
+      for (const a of d.anchors) {
+        const p = toXY(a);
+        if (!p) continue;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+        ctx.fillStyle = "#e5e7eb";
+        ctx.fill();
+      }
     }
 
-    // markers
-    for (const raw of markers) {
-      const m = normalizeMarker(raw);
-      if (m.x == null || m.y == null) continue;
+    // live preview while drafting
+    if (activeTool && activeTool !== "select" && draft.length) {
+      const color = "#a3e635";
+      const first = toXY(draft[0]);
+      if (first) {
+        ctx.beginPath();
+        ctx.arc(first.x, first.y, 3, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+      }
+      if (hover) {
+        const A = toXY(draft[0]);
+        const B = toXY(hover);
+        if (A && B) {
+          ctx.beginPath();
+          ctx.moveTo(A.x, A.y);
+          const rectW = rect.width;
+          if (activeTool === "ray") {
+            const dx = B.x - A.x,
+              dy = B.y - A.y,
+              k = (rectW - A.x) / (dx || 1e-6);
+            ctx.lineTo(A.x + dx * k, A.y + dy * k);
+          } else {
+            ctx.lineTo(B.x, B.y);
+          }
+          ctx.setLineDash([4, 4]);
+          ctx.strokeStyle = color;
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+    }
+
+    // ---- pattern markers -------------------------------------------------
+    for (const m of markers || []) {
+      const pxTime = typeof m.time === "string" ? toLWTime(m.time) : (m.time as number);
+      const price = getPriceForMarker(m);
+      if (price == null) continue;
+
+      const pt = xyAt(pxTime, price);
+      if (!pt) continue;
+
       const size = 6;
+      const side =
+        m.side ??
+        (m.position === "aboveBar" ? "above" : m.position === "belowBar" ? "below" : "inBar");
+      const fill =
+        m.color ||
+        (side === "above" ? "#ef5350" : side === "below" ? "#26a69a" : "#60a5fa");
+
       ctx.beginPath();
-      if (m.side === "above") {
-        ctx.moveTo(m.x, m.y - size);
-        ctx.lineTo(m.x - size, m.y + size);
-        ctx.lineTo(m.x + size, m.y + size);
-      } else if (m.side === "below") {
-        ctx.moveTo(m.x, m.y + size);
-        ctx.lineTo(m.x - size, m.y - size);
-        ctx.lineTo(m.x + size, m.y - size);
+      if (side === "above") {
+        ctx.moveTo(pt.x, pt.y - size);
+        ctx.lineTo(pt.x - size, pt.y + size);
+        ctx.lineTo(pt.x + size, pt.y + size);
+      } else if (side === "below") {
+        ctx.moveTo(pt.x, pt.y + size);
+        ctx.lineTo(pt.x - size, pt.y - size);
+        ctx.lineTo(pt.x + size, pt.y - size);
       } else {
-        // small diamond for inBar
-        ctx.moveTo(m.x, m.y - size);
-        ctx.lineTo(m.x + size, m.y);
-        ctx.lineTo(m.x, m.y + size);
-        ctx.lineTo(m.x - size, m.y);
+        ctx.moveTo(pt.x, pt.y - size);
+        ctx.lineTo(pt.x + size, pt.y);
+        ctx.lineTo(pt.x, pt.y + size);
+        ctx.lineTo(pt.x - size, pt.y);
       }
       ctx.closePath();
-      ctx.fillStyle = m.color;
+      ctx.fillStyle = fill;
       ctx.fill();
 
-      if (m.label) {
+      if (DRAW_MARKER_LABELS && (m as any).label) {
         ctx.fillStyle = "#e5e7eb";
         ctx.font = "10px Inter, system-ui, sans-serif";
-        ctx.fillText(m.label, m.x + 8, m.y + (m.side === "above" ? 0 : -2));
+        ctx.fillText((m as any).label, pt.x + 8, pt.y + (side === "above" ? 0 : -2));
       }
     }
   }
 
+  // ---- mouse handlers ----------------------------------------------------
   function onCanvasPointerDown(ev: React.MouseEvent<HTMLCanvasElement>) {
     ev.preventDefault();
     ev.stopPropagation();
@@ -457,10 +548,9 @@ export function Chart({
     if (t == null || p == null) return;
 
     let a = { time: Number(t), price: p };
-    if (magnet) a = nearestCandle(a.time, a.price);
+    if (magnet) a = snapAnchor(a.time, a.price);
 
     const next = [...draft, a];
-
     if (["trendline", "ray", "measure", "fib_retracement", "fib_extension", "rect"].includes(activeTool)) {
       if (next.length === 2) {
         const id = crypto.randomUUID();
@@ -472,6 +562,7 @@ export function Chart({
           meta: { createdAt: Date.now(), updatedAt: Date.now(), z: 0 },
         });
         setDraft([]);
+        setHover(null);
       } else setDraft(next);
     } else if (activeTool === "hline" || activeTool === "text") {
       const id = crypto.randomUUID();
@@ -489,9 +580,30 @@ export function Chart({
         },
         meta: { createdAt: Date.now(), updatedAt: Date.now(), z: 0 },
       });
+      setDraft([]);
+      setHover(null);
     } else if (activeTool === "path") {
       setDraft(next);
     }
+    scheduleDraw();
+  }
+
+  function onCanvasPointerMove(ev: React.MouseEvent<HTMLCanvasElement>) {
+    if (!activeTool || activeTool === "select") return;
+    const rect = (ev.target as HTMLCanvasElement).getBoundingClientRect();
+    const x = ev.clientX - rect.left,
+      y = ev.clientY - rect.top;
+    const chart = chartRef.current,
+      s = seriesRef.current;
+    if (!chart || !s) return;
+    const t = chart.timeScale().coordinateToTime(x) as UTCTimestamp | null;
+    const p = s.coordinateToPrice(y) as number | null;
+    if (t == null || p == null) return;
+
+    let a = { time: Number(t), price: p };
+    if (magnet) a = snapAnchor(a.time, a.price);
+    setHover(a);
+    scheduleDraw();
   }
 
   function onCanvasDoubleClick() {
@@ -500,11 +612,22 @@ export function Chart({
       addDrawing({
         id,
         type: "path",
-        anchors: draft,
+        anchors: hover ? [...draft, hover] : draft,
         props: { color: "#34d399", width: 1.6, style: "solid", visible: true, locked: false },
         meta: { createdAt: Date.now(), updatedAt: Date.now(), z: 0 },
       });
       setDraft([]);
+      setHover(null);
+      scheduleDraw();
+    }
+  }
+
+  function onCanvasContextMenu(ev: React.MouseEvent<HTMLCanvasElement>) {
+    ev.preventDefault();
+    if (draft.length) {
+      setDraft([]);
+      setHover(null);
+      scheduleDraw();
     }
   }
 
@@ -513,8 +636,10 @@ export function Chart({
       <canvas
         ref={overlayRef}
         onMouseDown={onCanvasPointerDown}
+        onMouseMove={onCanvasPointerMove}
         onDoubleClick={onCanvasDoubleClick}
-        style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", zIndex: 5, pointerEvents: "none" }}
+        onContextMenu={onCanvasContextMenu}
+        style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", zIndex: 5 }}
       />
     </div>
   );

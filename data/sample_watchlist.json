@@ -1,0 +1,5 @@
+[
+  {"symbol":"AAPL","asset":"stock","timeframe":"5m","adapter":"yfinance","enabled":true},
+  {"symbol":"MSFT","asset":"stock","timeframe":"5m","adapter":"yfinance","enabled":true},
+  {"symbol":"BTC-USD","asset":"crypto","timeframe":"5m","adapter":"yfinance","enabled":false}
+]
