@@ -91,7 +91,7 @@
   },
   "risk": {
     "equity": 10000.01,
-    "risk_pct": 10.0,
+    "risk_pct": 0.1,
     "atr_mult_sl": 1.5,
     "rr": 2.0,
     "tp_count": 2,

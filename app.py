@@ -1,5 +1,6 @@
 # app.py
 # Streamlit + Lightweight-Charts component with Indicators, Drawing Tools, and Pattern Detection
+from __future__ import annotations
 
 import math
 import json
@@ -16,11 +17,11 @@ import yfinance as yf
 
 from st_trading_draw import st_trading_draw
 
-import asyncio
+# --- keep YOUR sidebar + utils ---
 from ui.sidebar import sidebar, load_settings
-from engine.runner import run_engine_loop
-from engine.utils import OrderSuggestion
-from alerts.messages import format_entry, maybe_toast, csv_log
+# --- remove asyncio/loop; add engine singleton + storage ---
+from engine.singleton import get_engine
+from alerts.messages import maybe_toast, csv_log  # keep your toast/csv helpers
 from risk.manager import RiskOptions
 
 from patterns.engine import (
@@ -29,6 +30,8 @@ from patterns.engine import (
     hits_to_markers,
 )
 
+from storage import init_db, fetch_alerts, export_csv, insert_journal, fetch_journal
+
 # ---- Logging: quiet by default ----
 logging.basicConfig(level=logging.ERROR, format="%(levelname)s:%(name)s:%(message)s")
 logging.getLogger("yfinance").setLevel(logging.ERROR)
@@ -36,65 +39,57 @@ logging.getLogger("signal_ringer.engine").setLevel(logging.ERROR)
 
 st.set_page_config(layout="wide", page_title="Signal Ringer — Multi-symbol Paper Bot")
 
+# ---------- init ----------
+init_db()
+eng = get_engine()
+st.session_state.setdefault("seen_alert_ids", set())
+st.session_state.setdefault("autorefresh_sec", 8)
+
 st.title("📈 Signal Ringer — Paper Trade Suggestions")
-wl, opts, risk = sidebar()
+nav, wl, opts, risk, qc = sidebar()
 
+
+# clamp Risk % if settings.json is bad (prevents the 10.0>0.1 crash elsewhere)
+risk_sane = dict(risk)
+try:
+    rp = float(risk_sane.get("risk_pct", 0.01))
+except Exception:
+    rp = 0.01
+risk_sane["risk_pct"] = max(0.0005, min(0.10, rp))  # keep between 0.05% and 10%
+
+# configure engine every rerun (cheap; thread reads atomically)
+eng.configure(
+    trackers=wl,
+    strategies_cfg=opts,
+    risk_opts=RiskOptions(**risk_sane),
+    interval_sec=float(st.session_state.get("autorefresh_sec", 8)),
+)
+
+# ---------------- Live Engine Controls (non-blocking) ----------------
+col1, col2, col3 = st.columns([1, 1, 1])
+with col1:
+    if st.button("▶ Start Live Scan", disabled=eng.is_running(), use_container_width=True):
+        eng.start()
+        st.success("Engine starting...")
+with col2:
+    if st.button("⏹ Stop", disabled=not eng.is_running(), use_container_width=True):
+        eng.stop()
+        st.warning("Engine stopped")
+with col3:
+    st.session_state["autorefresh_sec"] = int(
+        st.number_input("Autorefresh (s)", min_value=3, max_value=30, value=int(st.session_state["autorefresh_sec"]))
+    )
+
+# Auto-refresh while engine runs (doesn’t block the chart UI)
+if eng.is_running():
+    st.autorefresh(interval=st.session_state["autorefresh_sec"] * 1000, key="live_refresh")
+
+# --------- legacy CSV log (kept for compatibility) ----------
 log_rows: list[dict] = []
-
 placeholder = st.empty()
 log_table = st.empty()
 
-def on_suggestion(sug: OrderSuggestion):
-    msg = format_entry(sug)
-    maybe_toast(msg)
-    log_rows.append({
-        "time": pd.Timestamp.utcnow().isoformat(),
-        "symbol": sug.symbol,
-        "tf": sug.timeframe,
-        "side": sug.side,
-        "qty": sug.qty,
-        "entry": sug.entry,
-        "sl": sug.sl,
-        "tp": "|".join(map(str,sug.tp)),
-        "strategy": sug.strategy,
-        "conf": sug.confidence,
-        "reason": sug.reason,
-    })
-    log_df = pd.DataFrame(log_rows).tail(200)
-    log_table.dataframe(log_df, use_container_width=True)
-
-if "engine_running" not in st.session_state:
-    st.session_state["engine_running"] = False
-
-col1, col2 = st.columns([1,1])
-with col1:
-    if st.button("▶ Start Live Scan", disabled=st.session_state["engine_running"]):
-        st.session_state["engine_running"] = True
-        st.success("Engine starting...")
-
-with col2:
-    if st.button("⏹ Stop"):
-        st.session_state["engine_running"] = False
-        st.warning("Engine stopped")
-
-if st.session_state["engine_running"]:
-    risk_opts = RiskOptions(**risk)
-    async def main():
-        await run_engine_loop(
-            trackers=wl,
-            strategies_cfg=opts,
-            risk_opts=risk_opts,
-            on_suggestion=on_suggestion,
-            interval_sec=30
-        )
-    # Streamlit + asyncio: run once per refresh
-    asyncio.run(main())
-
-if log_rows:
-    if st.button("💾 Export CSV"):
-        csv_log("data/logs.csv", log_rows)
-        st.success("Logged to data/logs.csv")
-
+# ==================== CHART / INDICATORS / PATTERNS (unchanged) ====================
 # -------------------- Config --------------------
 LOCAL_TZ = "Europe/Berlin"
 
@@ -137,7 +132,7 @@ with st.sidebar:
 
     ticker = st.text_input("Ticker / Symbol", value=default_symbol).strip()
     period_label = st.selectbox("Period", list(PERIOD_OPTIONS.keys()), index=0)
-    interval = st.selectbox("Resolution", INTERVAL_OPTIONS, index=0)
+    interval = st.selectbox("Resolution", INTERVAL_OPTIONS, index=2)  # 5m default
     show_volume = st.toggle("Show volume", value=True)
 
 if not ticker:
@@ -145,7 +140,7 @@ if not ticker:
 
 # -------------------- Indicator state scaffolding --------------------
 if "gapless" not in st.session_state:
-    st.session_state["gapless"] = True  # placeholder; LWC uses time-indexed data
+    st.session_state["gapless"] = True  # placeholder
 
 OVERLAY_TYPES = {"SMA", "EMA", "BB", "VWAP"}
 SUBPANE_TYPES = {"RSI", "MACD"}
@@ -306,9 +301,7 @@ with col_right:
         with colsP[0]:
             pst["enabled"] = st.toggle("Enable pattern engine", value=bool(pst["enabled"]))
         with colsP[1]:
-            pst["min_conf"] = float(
-                st.slider("Only alert if confidence ≥", 0.0, 1.0, float(pst["min_conf"]), 0.05)
-            )
+            pst["min_conf"] = float(st.slider("Only alert if confidence ≥", 0.0, 1.0, float(pst["min_conf"]), 0.05))
 
         if st.button("Restore default thresholds"):
             pst["cfg"] = PAT_DEFAULTS.copy()
@@ -316,38 +309,12 @@ with col_right:
 
 with st.expander("Select patterns"):
     all_names = [
-        "Hammer",
-        "Inverted Hammer",
-        "Bullish Engulfing",
-        "Bearish Engulfing",
-        "Doji",
-        "Morning Star",
-        "Evening Star",
-        "Bullish Harami",
-        "Bearish Harami",
-        "Tweezer Top",
-        "Tweezer Bottom",
-        # v2
-        "Head & Shoulders",
-        "Inverse Head & Shoulders",
-        "Piercing Line",
-        "Dark Cloud Cover",
-        "Three White Soldiers",
-        "Three Black Crows",
-        "Three Inside Up",
-        "Three Inside Down",
-        "Three Outside Up",
-        "Three Outside Down",
-        "Marubozu",
-        "Rising Window",
-        "Falling Window",
-        "Tasuki Up",
-        "Tasuki Down",
-        "Kicker Bull",
-        "Kicker Bear",
-        "Rising Three Methods",
-        "Falling Three Methods",
-        "Mat Hold",
+        "Hammer","Inverted Hammer","Bullish Engulfing","Bearish Engulfing","Doji",
+        "Morning Star","Evening Star","Bullish Harami","Bearish Harami","Tweezer Top","Tweezer Bottom",
+        "Head & Shoulders","Inverse Head & Shoulders","Piercing Line","Dark Cloud Cover",
+        "Three White Soldiers","Three Black Crows","Three Inside Up","Three Inside Down",
+        "Three Outside Up","Three Outside Down","Marubozu","Rising Window","Falling Window",
+        "Tasuki Up","Tasuki Down","Kicker Bull","Kicker Bear","Rising Three Methods","Falling Three Methods","Mat Hold",
     ]
     chosen = set(st.session_state["patterns_state"][f"{ticker}@{interval}"]["enabled_names"]
                  if "patterns_state" in st.session_state and f"{ticker}@{interval}" in st.session_state["patterns_state"]
@@ -369,17 +336,8 @@ def _days_since_jan1_now() -> int:
 
 def _period_days(yf_period: str) -> float:
     return {
-        "1d": 1,
-        "5d": 5,
-        "1w": 7,
-        "1mo": 30,
-        "3mo": 91,
-        "6mo": 182,
-        "ytd": float(_days_since_jan1_now()),
-        "1y": 365,
-        "2y": 730,
-        "5y": 1825,
-        "10y": 3650,
+        "1d": 1, "5d": 5, "1w": 7, "1mo": 30, "3mo": 91, "6mo": 182,
+        "ytd": float(_days_since_jan1_now()), "1y": 365, "2y": 730, "5y": 1825, "10y": 3650,
     }.get(yf_period, math.inf)
 
 def clamp_period_for_interval(period_key: str, interval: str) -> Tuple[str, Optional[str]]:
@@ -518,12 +476,7 @@ ohlcv_payload = [
         volume=float(v) if ("Volume" in df and show_volume) else None,
     )
     for ts, o, h, l, c, v in zip(
-        df.index,
-        df["Open"],
-        df["High"],
-        df["Low"],
-        df["Close"],
-        (df["Volume"] if "Volume" in df else [0] * len(df)),
+        df.index, df["Open"], df["High"], df["Low"], df["Close"], (df["Volume"] if "Volume" in df else [0] * len(df)),
     )
 ]
 
@@ -548,37 +501,31 @@ for ind in visible_inds:
             p = int(ind["params"].get("period", 20))
             src = ind["params"].get("source", "close")
             y = sma(get_source_series(df, src), p)
-            overlay_indicators.append(
-                {"id": f"SMA_{p}", "name": f"SMA({p})", "color": color, "width": 1.6, "dash": dash,
-                 "data": _line_series_from_pd(df.index, y)}
-            )
+            overlay_indicators.append({"id": f"SMA_{p}","name": f"SMA({p})","color": color,"width": 1.6,"dash": dash,
+                                       "data": _line_series_from_pd(df.index, y)})
         elif ind["type"] == "EMA":
             p = int(ind["params"].get("period", 50))
             src = ind["params"].get("source", "close")
             y = ema(get_source_series(df, src), p)
-            overlay_indicators.append(
-                {"id": f"EMA_{p}", "name": f"EMA({p})", "color": color, "width": 1.6, "dash": dash,
-                 "data": _line_series_from_pd(df.index, y)}
-            )
+            overlay_indicators.append({"id": f"EMA_{p}","name": f"EMA({p})","color": color,"width": 1.6,"dash": dash,
+                                       "data": _line_series_from_pd(df.index, y)})
         elif ind["type"] == "BB":
             p = int(ind["params"].get("period", 20))
             sd = float(ind["params"].get("stddev", 2.0))
             src = ind["params"].get("source", "close")
             m, u, l = bollinger(get_source_series(df, src), p, sd)
             overlay_indicators += [
-                {"id": f"BB_LO_{p}", "name": "BB Lower", "color": color, "width": 1.0, "dash": "dash",
+                {"id": f"BB_LO_{p}","name": "BB Lower","color": color,"width": 1.0,"dash": "dash",
                  "data": _line_series_from_pd(df.index, l)},
-                {"id": f"BB_UP_{p}", "name": "BB Upper", "color": color, "width": 1.0, "dash": "dash",
+                {"id": f"BB_UP_{p}","name": "BB Upper","color": color,"width": 1.0,"dash": "dash",
                  "data": _line_series_from_pd(df.index, u)},
-                {"id": f"BB_MID_{p}", "name": "BB Mid", "color": color, "width": 1.0, "dash": "dot",
+                {"id": f"BB_MID_{p}","name": "BB Mid","color": color,"width": 1.0,"dash": "dot",
                  "data": _line_series_from_pd(df.index, m)},
             ]
         elif ind["type"] == "VWAP":
             y = vwap(df)
-            overlay_indicators.append(
-                {"id": "VWAP", "name": "VWAP", "color": color, "width": 2.0, "dash": dash,
-                 "data": _line_series_from_pd(df.index, y)}
-            )
+            overlay_indicators.append({"id": "VWAP","name": "VWAP","color": color,"width": 2.0,"dash": dash,
+                                       "data": _line_series_from_pd(df.index, y)})
 
 pane_indicators = []
 
@@ -589,16 +536,11 @@ if rsi_inds:
     for ind in rsi_inds:
         p = int(ind["params"].get("period", 14))
         y = rsi(get_source_series(df, "Close"), p)
-        lines.append(
-            {"id": f"RSI_{p}", "name": f"RSI({p})", "color": ind.get("color", "#7f7f7f"),
-             "width": 1.6, "dash": "solid", "data": _line_series_from_pd(df.index, y)}
-        )
+        lines.append({"id": f"RSI_{p}","name": f"RSI({p})","color": ind.get("color", "#7f7f7f"),
+                      "width": 1.6,"dash": "solid","data": _line_series_from_pd(df.index, y)})
     pane_indicators.append({
-        "id": "RSI",
-        "height": 140,
-        "yRange": {"min": 0, "max": 100},
-        "lines": lines,
-        "hlines": [{"y": 70, "color": "#888", "dash": "dot"}, {"y": 30, "color": "#888", "dash": "dot"}],
+        "id": "RSI","height": 140,"yRange": {"min": 0, "max": 100},
+        "lines": lines,"hlines": [{"y": 70, "color": "#888", "dash": "dot"}, {"y": 30, "color": "#888", "dash": "dot"}],
     })
 
 # MACD (one pane per MACD config)
@@ -611,12 +553,12 @@ for ind in [i for i in visible_inds if i["type"] == "MACD"]:
         "id": f"MACD_{f}_{s}_{sig}",
         "height": 160,
         "lines": [
-            {"id": f"MACD_L_{f}_{s}_{sig}", "name": f"MACD({f},{s})", "color": ind.get("color", "#1f77b4"),
-             "width": 1.6, "dash": "solid", "data": _line_series_from_pd(df.index, line)},
-            {"id": f"MACD_S_{f}_{s}_{sig}", "name": "Signal", "color": "#aaaaaa",
-             "width": 1.2, "dash": "dot", "data": _line_series_from_pd(df.index, signal_line)},
+            {"id": f"MACD_L_{f}_{s}_{sig}","name": f"MACD({f},{s})","color": ind.get("color", "#1f77b4"),
+             "width": 1.6,"dash": "solid","data": _line_series_from_pd(df.index, line)},
+            {"id": f"MACD_S_{f}_{s}_{sig}","name": "Signal","color": "#aaaaaa",
+             "width": 1.2,"dash": "dot","data": _line_series_from_pd(df.index, signal_line)},
         ],
-        "hist": [{"id": f"MACD_H_{f}_{s}_{sig}", "name": "Hist", "color": "#60a5fa",
+        "hist": [{"id": f"MACD_H_{f}_{s}_{sig}","name": "Hist","color": "#60a5fa",
                   "data": _line_series_from_pd(df.index, hist)}],
     })
 
@@ -624,15 +566,11 @@ for ind in [i for i in visible_inds if i["type"] == "MACD"]:
 pattern_markers: list = []
 profile_key = _profile_key(ticker, interval)
 
-# Always define defaults so we don't reference-before-assign
 hits = []
 df_slice = df
-offset = 0
-
 if "patterns_state" in st.session_state and profile_key in st.session_state["patterns_state"]:
     pst = st.session_state["patterns_state"][profile_key]
     if pst.get("enabled", True):
-        # evaluate a tail slice for speed
         N = min(len(df), 400)
         df_slice = df.iloc[-N:].copy()
         try:
@@ -640,18 +578,15 @@ if "patterns_state" in st.session_state and profile_key in st.session_state["pat
         except Exception:
             hits = []
 
-# offset to original df index
 offset = len(df) - len(df_slice)
 for h in hits:
     h.index += offset
     h.bars = [b + offset for b in h.bars]
 
-# safety filter: keep only explicitly enabled names
 enabled_set = set(st.session_state["patterns_state"][profile_key]["enabled_names"]) \
     if "patterns_state" in st.session_state and profile_key in st.session_state["patterns_state"] else set()
 hits = [h for h in hits if h.name in enabled_set]
 
-# alerts + throttle (LOG ONLY — no toast)
 if "signals_log" not in st.session_state:
     st.session_state["signals_log"] = []
 if "patterns_state" in st.session_state and profile_key in st.session_state["patterns_state"]:
@@ -673,7 +608,6 @@ if "patterns_state" in st.session_state and profile_key in st.session_state["pat
                 "price": float(df['Close'].iat[h.index]),
             })
 
-# markers for chart
 pattern_markers = hits_to_markers(hits, df)
 
 # -------------------- Drawings persistence + component render --------------------
@@ -681,23 +615,20 @@ if "drawings" not in st.session_state:
     st.session_state["drawings"] = {}
 initial_drawings = st.session_state["drawings"].get(profile_key, {})
 
-if enable_draw:
-    draw_state = st_trading_draw(
-        ohlcv=ohlcv_payload,
-        symbol=ticker,
-        timeframe=interval,
-        initial_drawings=initial_drawings,
-        magnet=magnet,
-        toolbar_default="docked-right",
-        overlay_indicators=overlay_indicators,
-        pane_indicators=pane_indicators,
-        markers=pattern_markers,   # pattern markers to the component
-        key=f"draw_{profile_key}",
-    )
-    if isinstance(draw_state, dict) and "drawings" in draw_state:
-        st.session_state["drawings"][profile_key] = draw_state["drawings"]
-else:
-    st.info("Chart component disabled. Enable it in Options → Drawing Tools.")
+draw_state = st_trading_draw(
+    ohlcv=ohlcv_payload,
+    symbol=ticker,
+    timeframe=interval,
+    initial_drawings=initial_drawings,
+    magnet=True,
+    toolbar_default="docked-right",
+    overlay_indicators=overlay_indicators,
+    pane_indicators=pane_indicators,
+    markers=pattern_markers,
+    key=f"draw_{profile_key}",
+)
+if isinstance(draw_state, dict) and "drawings" in draw_state:
+    st.session_state["drawings"][profile_key] = draw_state["drawings"]
 
 # -------------------- Export / Import drawings --------------------
 with st.expander("Drawings: Export / Import", expanded=False):
@@ -721,10 +652,200 @@ with st.expander("Drawings: Export / Import", expanded=False):
             except Exception as e:
                 st.error(f"Import failed: {e}")
 
-# -------------------- Signals log --------------------
+# -------------------- Pattern Signals Log --------------------
 with st.expander("Pattern Signals Log", expanded=False):
     if st.session_state.get("signals_log"):
         df_log = pd.DataFrame(st.session_state["signals_log"])[-200:]
         st.dataframe(df_log, use_container_width=True, height=240)
     else:
         st.caption("No signals yet.")
+
+# ==================== LIVE — NEW ALERTS (non-blocking board) ====================
+with st.expander("🔔 Live — New Alerts (new only)", expanded=True):
+    # drain queue without blocking
+    pending = []
+    try:
+        while True:
+            pending.append(eng.q.get_nowait())
+    except Exception:
+        pass
+
+    new_hits = [h for h in pending if h["id"] not in st.session_state["seen_alert_ids"]]
+    for h in new_hits:
+        st.session_state["seen_alert_ids"].add(h["id"])
+        maybe_toast(h["msg"])
+        # also mirror to legacy log_rows so your CSV button still works
+        log_rows.append({
+            "time": h["time"], "symbol": h["symbol"], "tf": h["tf"], "side": h["side"],
+            "qty": h["meta"].get("qty", 0), "entry": h["price"], "sl": h["meta"].get("sl"),
+            "tp": "|".join(map(str, h["meta"].get("tp", []))), "strategy": h["strategy"],
+            "conf": h["confidence"], "reason": h["meta"].get("reason", ""),
+        })
+
+    if new_hits:
+        df_new = pd.DataFrame(new_hits)[["time","symbol","tf","strategy","side","price","confidence","msg","id"]]
+        st.dataframe(df_new, use_container_width=True, height=280, hide_index=True)
+    else:
+        st.caption("No new alerts.")
+
+    c1, c2 = st.columns(2)
+    if c1.button("Mark all as read", use_container_width=True):
+        for h in pending:
+            st.session_state["seen_alert_ids"].add(h["id"])
+        st.success("Marked.")
+
+    if c2.button("Export alerts CSV", use_container_width=True):
+        path = export_csv("alerts", "data/alerts_export.csv")
+        st.success(f"Saved → {path}")
+
+# Legacy CSV button still available
+if log_rows:
+    if st.button("💾 Export CSV (legacy logs)"):
+        csv_log("data/logs.csv", log_rows)
+        st.success("Logged to data/logs.csv")
+
+# ==================== HISTORY & JOURNAL ====================
+st.markdown("---")
+st.header("🗂️ History & Journal")
+tabs = st.tabs(["History","Data Collection","Setup & Strategy","Performance","Emotion Log","Trading Plan"])
+
+# History
+with tabs[0]:
+    st.subheader("Alert Archive")
+    dfA = fetch_alerts()
+    if dfA.empty:
+        st.caption("No alerts yet.")
+    else:
+        c1, c2, c3 = st.columns(3)
+        syms = sorted(dfA["symbol"].unique().tolist())
+        sy_f = c1.multiselect("Symbols", syms, default=syms[: min(5, len(syms))])
+        strats = sorted(dfA["strategy"].unique().tolist())
+        st_f = c2.multiselect("Strategies", strats, default=strats[: min(5, len(strats))])
+        fdf = dfA
+        if sy_f: fdf = fdf[fdf["symbol"].isin(sy_f)]
+        if st_f: fdf = fdf[fdf["strategy"].isin(st_f)]
+        st.dataframe(fdf, use_container_width=True, height=420, hide_index=True)
+        if c3.button("Export filtered CSV"):
+            path = "data/alerts_filtered.csv"
+            fdf.to_csv(path, index=False)
+            st.success(f"Saved → {path}")
+
+# Data Collection
+with tabs[1]:
+    st.subheader("Raw Signal Data (editable notes)")
+    dfA = fetch_alerts()
+    if dfA.empty:
+        st.caption("No data yet.")
+    else:
+        dfE = dfA[["id","ts_utc","symbol","timeframe","strategy","side","price","confidence","msg"]].copy()
+        dfE["note"] = ""
+        out = st.data_editor(dfE, use_container_width=True, height=420, key="data_collect")
+        if st.button("Save notes to Journal"):
+            now = datetime.now(timezone.utc).isoformat()
+            for _, row in out.iterrows():
+                note = (row.get("note") or "").strip()
+                if not note:
+                    continue
+                insert_journal({
+                    "id": f"note_{row['id']}",
+                    "ts_utc": now,
+                    "type": "note",
+                    "text": note,
+                    "tags": f"symbol:{row['symbol']},strategy:{row['strategy']}",
+                    "link_id": row["id"],
+                    "meta": {},
+                })
+            st.success("Saved notes.")
+        if st.button("Export CSV (Data Collection)"):
+            p = "data/data_collection.csv"; out.to_csv(p, index=False); st.success(f"Saved → {p}")
+
+# Setup & Strategy
+with tabs[2]:
+    st.subheader("Pre-Trade Checklist")
+    with st.form("setup_form"):
+        c1, c2, c3 = st.columns(3)
+        sym = c1.text_input("Symbol", value="AAPL")
+        strat = c2.text_input("Strategy", value="EMA Pullback")
+        plan_ok = c3.checkbox("Plan validated (rules met?)", value=True)
+        notes = st.text_area("Notes / Plan", height=120, value="Entry: ...\nRisk: ...\nInvalidation: ...")
+        submitted = st.form_submit_button("Save setup")
+    if submitted:
+        insert_journal({
+            "id": f"setup_{uuid4().hex[:10]}",
+            "ts_utc": datetime.now(timezone.utc).isoformat(),
+            "type": "setup",
+            "text": notes,
+            "tags": f"symbol:{sym},strategy:{strat},ok:{plan_ok}",
+            "link_id": "",
+            "meta": {"symbol": sym, "strategy": strat, "ok": bool(plan_ok)},
+        })
+        st.success("Setup saved.")
+
+    st.markdown("#### Recent setups")
+    j = fetch_journal("setup")
+    if not j.empty:
+        st.dataframe(j[["ts_utc","text","tags"]], use_container_width=True, hide_index=True, height=240)
+    else:
+        st.caption("No setups yet.")
+
+# Performance (placeholder KPIs)
+with tabs[3]:
+    st.subheader("Performance Dashboard")
+    st.caption("Hook this to your 'trades' table when fills/exits are logged.")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Trades", 0)
+    c2.metric("Win rate", "—")
+    c3.metric("Profit Factor", "—")
+    c4, c5, c6 = st.columns(3)
+    c4.metric("Avg R", "—")
+    c5.metric("Expectancy", "—")
+    c6.metric("Max DD", "—")
+
+# Emotion Log
+with tabs[4]:
+    st.subheader("Emotion Log")
+    calm = st.slider("Calm ↔ Anxious", 0, 100, 60)
+    disciplined = st.slider("Disciplined ↔ Impulsive", 0, 100, 70)
+    confident = st.slider("Confident ↔ Afraid", 0, 100, 65)
+    tags = st.multiselect("Tags", ["FOMO","Revenge","Overtrading","Hesitation","Chasing","Boredom"], [])
+    note = st.text_area("Note", height=100)
+    if st.button("Save emotion entry"):
+        insert_journal({
+            "id": f"emo_{uuid4().hex[:10]}",
+            "ts_utc": datetime.now(timezone.utc).isoformat(),
+            "type": "emotion",
+            "text": note,
+            "tags": ",".join(tags),
+            "link_id": "",
+            "meta": {"calm": calm, "disciplined": disciplined, "confident": confident},
+        })
+        st.success("Saved.")
+    st.markdown("#### Recent emotions")
+    j = fetch_journal("emotion")
+    if not j.empty:
+        st.dataframe(j[["ts_utc","tags","text"]], use_container_width=True, hide_index=True, height=240)
+    else:
+        st.caption("No entries yet.")
+
+# Trading Plan (versioned snapshots)
+with tabs[5]:
+    st.subheader("Trading Plan")
+    plan_txt = st.text_area("Plan (edit and save a new version)", height=200)
+    c1, c2 = st.columns(2)
+    if c1.button("Save new version"):
+        insert_journal({
+            "id": f"plan_{uuid4().hex[:10]}",
+            "ts_utc": datetime.now(timezone.utc).isoformat(),
+            "type": "plan",
+            "text": plan_txt,
+            "tags": "plan",
+            "link_id": "",
+            "meta": {},
+        })
+        st.success("Saved.")
+    st.markdown("#### Versions")
+    j = fetch_journal("plan")
+    if not j.empty:
+        st.dataframe(j[["ts_utc","text"]], use_container_width=True, hide_index=True, height=300)
+    else:
+        st.caption("No versions yet.")
