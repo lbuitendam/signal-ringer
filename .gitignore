@@ -13,3 +13,4 @@ dist/
 *.exe
 *.pkg
 "@ | Out-File -Encoding UTF8 .gitignore
+!st_trading_draw/frontend/dist/

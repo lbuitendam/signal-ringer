@@ -1,31 +1,9 @@
 # st_trading_draw/__init__.py
+from __future__ import annotations
+
 from pathlib import Path
-import os
 import streamlit.components.v1 as components
 
-# Set to False to use a dev server (see below)
-_RELEASE = True
-
-base_dir = (Path(__file__).parent / "frontend").resolve()
-dist_dir = (base_dir / "dist").resolve()    # Vite default
-build_dir = (base_dir / "build").resolve()  # CRA default
-
-if _RELEASE:
-    # Accept either Vite's "dist" or CRA's "build"
-    if dist_dir.exists():
-        _COMP = components.declare_component("st_trading_draw", path=str(dist_dir))
-    elif build_dir.exists():
-        _COMP = components.declare_component("st_trading_draw", path=str(build_dir))
-    else:
-        raise RuntimeError(
-            f"No frontend bundle found.\n"
-            f"Looked for:\n  {dist_dir}\n  {build_dir}\n"
-            f"Run 'npm run build' inside: {base_dir}"
-        )
-else:
-    # Use a dev server (e.g., Vite) when developing the component
-    dev_url = os.environ.get("ST_COMPONENT_DEV_URL", "http://localhost:3001")
-    _COMP = components.declare_component("st_trading_draw", url=dev_url)
 
 def st_trading_draw(
     *,
@@ -34,13 +12,28 @@ def st_trading_draw(
     timeframe=None,
     initial_drawings=None,
     magnet=False,
-    toolbar_default="docked-right",
+    toolbar_default: str = "docked-right",
     overlay_indicators=None,
-    pane_indicators=None,   # optional panes
-    markers=None,           # pattern markers
+    pane_indicators=None,
+    markers=None,
     key=None,
 ):
-    return _COMP(
+    """
+    Declare the component at call-time to avoid Streamlit's
+    'module is None' edge case when importing from certain contexts.
+    """
+
+    dist_dir = (Path(__file__).parent / "frontend" / "dist").resolve()
+    if not dist_dir.exists():
+        raise RuntimeError(
+            "st_trading_draw frontend bundle not found.\n"
+            f"Expected: {dist_dir}\n"
+            "Build it (e.g., in st_trading_draw/frontend run: npm install && npm run build)\n"
+            "Or set ST_COMPONENT_DEV_URL to use a dev server."
+        )
+
+    comp = components.declare_component("st_trading_draw", path=str(dist_dir))
+    return comp(
         ohlcv=ohlcv,
         symbol=symbol,
         timeframe=timeframe,

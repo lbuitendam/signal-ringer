@@ -5,10 +5,10 @@ from __future__ import annotations
 import math
 import json
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 from uuid import uuid4
 from zoneinfo import ZoneInfo
-
+from streamlit_autorefresh import st_autorefresh
 import logging
 import numpy as np
 import pandas as pd
@@ -17,11 +17,11 @@ import yfinance as yf
 
 from st_trading_draw import st_trading_draw
 
-# --- keep YOUR sidebar + utils ---
+# --- your sidebar + utils ---
 from ui.sidebar import sidebar, load_settings
-# --- remove asyncio/loop; add engine singleton + storage ---
+# --- engine singleton + storage ---
 from engine.singleton import get_engine
-from alerts.messages import maybe_toast, csv_log  # keep your toast/csv helpers
+from alerts.messages import maybe_toast, csv_log
 from risk.manager import RiskOptions
 
 from patterns.engine import (
@@ -37,7 +37,11 @@ logging.basicConfig(level=logging.ERROR, format="%(levelname)s:%(name)s:%(messag
 logging.getLogger("yfinance").setLevel(logging.ERROR)
 logging.getLogger("signal_ringer.engine").setLevel(logging.ERROR)
 
-st.set_page_config(layout="wide", page_title="Signal Ringer — Multi-symbol Paper Bot")
+st.set_page_config(
+    layout="wide",
+    page_title="Signal Ringer — Multi-symbol Paper Bot",
+    initial_sidebar_state="collapsed",
+)
 
 # ---------- init ----------
 init_db()
@@ -46,10 +50,23 @@ st.session_state.setdefault("seen_alert_ids", set())
 st.session_state.setdefault("autorefresh_sec", 8)
 
 st.title("📈 Signal Ringer — Paper Trade Suggestions")
+
+# Top nav (use Streamlit-native links so they work everywhere)
+nav_cols = st.columns(5)
+with nav_cols[0]:
+    st.page_link("app.py", label="Dashboard")
+with nav_cols[1]:
+    st.page_link("pages/1_Scanner.py", label="Scanner")
+with nav_cols[2]:
+    st.page_link("pages/2_Backtesting.py", label="Backtesting")
+with nav_cols[3]:
+    st.page_link("pages/3_History_&_Journal.py", label="History & Journal")
+with nav_cols[4]:
+    st.page_link("pages/4_User_Settings.py", label="User Settings")
+
 nav, wl, opts, risk, qc = sidebar()
 
-
-# clamp Risk % if settings.json is bad (prevents the 10.0>0.1 crash elsewhere)
+# Clamp Risk % if settings.json is bad (prevents the 10.0>0.1 crash elsewhere)
 risk_sane = dict(risk)
 try:
     rp = float(risk_sane.get("risk_pct", 0.01))
@@ -57,7 +74,7 @@ except Exception:
     rp = 0.01
 risk_sane["risk_pct"] = max(0.0005, min(0.10, rp))  # keep between 0.05% and 10%
 
-# configure engine every rerun (cheap; thread reads atomically)
+# Configure engine every rerun (cheap; thread reads atomically)
 eng.configure(
     trackers=wl,
     strategies_cfg=opts,
@@ -65,31 +82,19 @@ eng.configure(
     interval_sec=float(st.session_state.get("autorefresh_sec", 8)),
 )
 
-# ---------------- Live Engine Controls (non-blocking) ----------------
-col1, col2, col3 = st.columns([1, 1, 1])
-with col1:
-    if st.button("▶ Start Live Scan", disabled=eng.is_running(), use_container_width=True):
-        eng.start()
-        st.success("Engine starting...")
-with col2:
-    if st.button("⏹ Stop", disabled=not eng.is_running(), use_container_width=True):
-        eng.stop()
-        st.warning("Engine stopped")
-with col3:
-    st.session_state["autorefresh_sec"] = int(
-        st.number_input("Autorefresh (s)", min_value=3, max_value=30, value=int(st.session_state["autorefresh_sec"]))
+# Auto-refresh while engine runs (non-blocking)
+if eng.is_running() or qc.get("engine_on"):
+    st_autorefresh(
+        interval=int(st.session_state.get("autorefresh_sec", 8)) * 1000,
+        key="live_refresh",
     )
-
-# Auto-refresh while engine runs (doesn’t block the chart UI)
-if eng.is_running():
-    st.autorefresh(interval=st.session_state["autorefresh_sec"] * 1000, key="live_refresh")
 
 # --------- legacy CSV log (kept for compatibility) ----------
 log_rows: list[dict] = []
 placeholder = st.empty()
 log_table = st.empty()
 
-# ==================== CHART / INDICATORS / PATTERNS (unchanged) ====================
+# ==================== CHART / INDICATORS / PATTERNS ====================
 # -------------------- Config --------------------
 LOCAL_TZ = "Europe/Berlin"
 
@@ -143,7 +148,6 @@ if "gapless" not in st.session_state:
     st.session_state["gapless"] = True  # placeholder
 
 OVERLAY_TYPES = {"SMA", "EMA", "BB", "VWAP"}
-SUBPANE_TYPES = {"RSI", "MACD"}
 DEFAULT_PARAMS = {
     "SMA": {"period": 20, "source": "close"},
     "EMA": {"period": 50, "source": "close"},
@@ -237,7 +241,7 @@ with col_right:
                     with top[4]:
                         allowed = ["overlay", "sub"] if ind["type"] not in {"RSI", "MACD"} else ["sub"]
                         ind["pane"] = st.selectbox(
-                            "Pane", allowed, index=allowed.index(ind["pane"]), key=f"pane_{ind['id']}"
+                            "Pane", allowed, index=allowed.index(ind["pane"]), key=f"pane_{ind['id']}",
                         )
                     with top[5]:
                         if st.button("Delete", key=f"del_{ind['id']}", use_container_width=True):
@@ -258,9 +262,7 @@ with col_right:
                         )
                         if ind["type"] == "BB":
                             ind["params"]["stddev"] = float(
-                                c[2].number_input(
-                                    "Std Dev", 0.1, 10.0, float(ind["params"]["stddev"]), 0.1, key=f"std_{ind['id']}"
-                                )
+                                c[2].number_input("Std Dev", 0.1, 10.0, float(ind["params"]["stddev"]), 0.1, key=f"std_{ind['id']}")
                             )
                     elif ind["type"] == "RSI":
                         ind["params"]["period"] = int(
@@ -567,19 +569,18 @@ pattern_markers: list = []
 profile_key = _profile_key(ticker, interval)
 
 hits = []
-df_slice = df
-if "patterns_state" in st.session_state and profile_key in st.session_state["patterns_state"]:
-    pst = st.session_state["patterns_state"][profile_key]
-    if pst.get("enabled", True):
-        N = min(len(df), 400)
-        df_slice = df.iloc[-N:].copy()
-        try:
-            hits = detect_all(df_slice, pst["enabled_names"], pst["cfg"])
-        except Exception:
-            hits = []
+# Build pattern markers for main chart
+df_slice = df.iloc[-min(len(df), 400):].copy()
+hits = []
+if pst.get("enabled") and pst["enabled_names"]:
+    hits = detect_all(df_slice, pst["enabled_names"], pst["cfg"])
+    off = len(df) - len(df_slice)
+    for h in hits: h.index += off; h.bars = [b + off for b in h.bars]
+pattern_markers = hits_to_markers(hits, df)
 
 offset = len(df) - len(df_slice)
 for h in hits:
+    # align found indices back to full df
     h.index += offset
     h.bars = [b + offset for b in h.bars]
 
@@ -587,6 +588,7 @@ enabled_set = set(st.session_state["patterns_state"][profile_key]["enabled_names
     if "patterns_state" in st.session_state and profile_key in st.session_state["patterns_state"] else set()
 hits = [h for h in hits if h.name in enabled_set]
 
+# Optional: log pattern alerts into session (UI expander below shows them)
 if "signals_log" not in st.session_state:
     st.session_state["signals_log"] = []
 if "patterns_state" in st.session_state and profile_key in st.session_state["patterns_state"]:
@@ -605,15 +607,52 @@ if "patterns_state" in st.session_state and profile_key in st.session_state["pat
                 "pattern": h.name,
                 "dir": h.direction,
                 "conf": round(h.confidence, 3),
-                "price": float(df['Close'].iat[h.index]),
+                "price": float(df["Close"].iat[h.index]),
             })
 
-pattern_markers = hits_to_markers(hits, df)
+pattern_markers = hits_to_markers(hits, df) if hits else []
+
+# -------------------- Strategy alerts → markers --------------------
+def _snap_to_candle_time(ts_utc: pd.Timestamp, idx: pd.DatetimeIndex) -> int:
+    """Return nearest candle timestamp (seconds) for a UTC timestamp."""
+    if ts_utc.tzinfo is None:
+        ts_utc = ts_utc.tz_localize("UTC")
+    pos = idx.get_indexer([ts_utc], method="nearest")[0]
+    return int(idx[max(0, min(pos, len(idx) - 1))].timestamp())
+
+strategy_markers: list = []
+df_alerts = fetch_alerts()
+if not df_alerts.empty:
+    # Expect columns: id, ts_utc, symbol, timeframe, strategy, side, price, confidence, msg, ...
+    f = df_alerts[(df_alerts["symbol"] == ticker) & (df_alerts["timeframe"] == interval)].tail(400)
+    for _, r in f.iterrows():
+        try:
+            ts = pd.to_datetime(r["ts_utc"], utc=True)
+        except Exception:
+            continue
+        side = str(r.get("side", "")).lower()
+        is_long = side in ("long", "buy", "bull", "bullish")
+        shape = "arrowUp" if is_long else "arrowDown"
+        position = "belowBar" if is_long else "aboveBar"
+        color = "#10b981" if is_long else "#ef4444"  # green / red
+        tsec = _snap_to_candle_time(ts, df.index)
+        label = str(r.get("strategy", "Signal"))
+        strategy_markers.append({
+            "time": tsec,
+            "position": position,
+            "color": color,
+            "shape": shape,
+            "text": label,
+        })
+
+# Combine all markers
+all_markers = (pattern_markers or []) + (strategy_markers or [])
 
 # -------------------- Drawings persistence + component render --------------------
 if "drawings" not in st.session_state:
     st.session_state["drawings"] = {}
-initial_drawings = st.session_state["drawings"].get(profile_key, {})
+initial_drawings = st.session_state["drawings"].get(prof_key, {})
+
 
 draw_state = st_trading_draw(
     ohlcv=ohlcv_payload,
@@ -624,7 +663,7 @@ draw_state = st_trading_draw(
     toolbar_default="docked-right",
     overlay_indicators=overlay_indicators,
     pane_indicators=pane_indicators,
-    markers=pattern_markers,
+    markers=all_markers,  # <- patterns + strategy signals
     key=f"draw_{profile_key}",
 )
 if isinstance(draw_state, dict) and "drawings" in draw_state:
@@ -646,7 +685,7 @@ with st.expander("Drawings: Export / Import", expanded=False):
         if up:
             try:
                 payload = json.loads(up.read().decode("utf-8"))
-                st.session_state["drawings"][profile_key] = payload
+                st.session_state["drawings"][prof_key] = payload
                 st.success("Imported drawings")
                 st.rerun()
             except Exception as e:

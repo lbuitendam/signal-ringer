@@ -1,27 +1,5 @@
 {
-  "watchlist": [
-    {
-      "symbol": "=xau",
-      "asset": "stock",
-      "timeframe": "5m",
-      "adapter": "yfinance",
-      "enabled": true
-    },
-    {
-      "symbol": "=XAG",
-      "asset": "stock",
-      "timeframe": "1m",
-      "adapter": "csv",
-      "enabled": true
-    },
-    {
-      "symbol": "BTC-USD",
-      "asset": "crypto",
-      "timeframe": "15m",
-      "adapter": "yfinance",
-      "enabled": true
-    }
-  ],
+  "watchlist": [],
   "strategies": {
     "enabled": {
       "EMA20/50 Pullback": {
@@ -30,12 +8,12 @@
         "approved": true
       },
       "MACD Trend": {
-        "enabled": true,
+        "enabled": false,
         "params": {},
         "approved": true
       },
       "Range Breakout": {
-        "enabled": true,
+        "enabled": false,
         "params": {
           "lookback": 20,
           "retest": 5
@@ -68,17 +46,17 @@
         "approved": true
       },
       "Shooting Star": {
-        "enabled": true,
+        "enabled": false,
         "params": {},
         "approved": true
       },
       "Tweezer Top": {
-        "enabled": true,
+        "enabled": false,
         "params": {},
         "approved": true
       },
       "Tweezer Bottom": {
-        "enabled": true,
+        "enabled": false,
         "params": {},
         "approved": true
       }
@@ -86,8 +64,9 @@
     "big_boss": {
       "enabled": true,
       "k_bars": 3,
-      "tol": 0.0033999999999999994
-    }
+      "tol": 0.0034
+    },
+    "min_conf": 0.55
   },
   "risk": {
     "equity": 10000.01,
