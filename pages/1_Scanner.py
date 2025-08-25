@@ -1,9 +1,9 @@
+# pages/1_Scanner.py
 from __future__ import annotations
+
 import math
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Tuple
-from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -11,7 +11,6 @@ import pandas as pd
 import streamlit as st
 import yfinance as yf
 
-from engine.singleton import get_engine
 from ui.sidebar import load_settings, save_settings
 from st_trading_draw import st_trading_draw
 
@@ -26,15 +25,20 @@ from patterns.engine import (
 from strategies.catalog import get_catalog
 from engine.runner import build_strategy  # reuse factory
 
+
+# ---------------- Consts / Page ----------------
 LOCAL_TZ = "Europe/Berlin"
 st.set_page_config(layout="wide", page_title="Scanner — Signal Ringer")
-eng = get_engine()
 st.title("🧠 Scanner — Patterns & Strategies")
 
-# ---------------- Helpers ----------------
-PERIOD_OPTIONS = {"1D": "1d","5D": "5d","1M": "1mo","3M": "3mo","6M": "6mo","YTD": "ytd","1Y": "1y","2Y": "2y","5Y": "5y"}
+PERIOD_OPTIONS = {
+    "1D": "1d", "5D": "5d", "1M": "1mo", "3M": "3mo", "6M": "6mo",
+    "YTD": "ytd", "1Y": "1y", "2Y": "2y", "5Y": "5y"
+}
 INTERVAL_OPTIONS = ["1m","2m","5m","15m","30m","60m","90m","1d","1wk","1mo"]
 
+
+# ---------------- Helpers ----------------
 def _days_since_jan1_now() -> int:
     now = datetime.now(timezone.utc)
     jan1 = datetime(now.year, 1, 1, tzinfo=timezone.utc)
@@ -63,13 +67,15 @@ def fetch_ohlcv(symbol: str, yf_period: str, interval: str) -> pd.DataFrame:
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = [c[0] if isinstance(c, tuple) else str(c) for c in df.columns]
     cols = {c.lower(): c for c in df.columns}
-    col_map = {}
+    col_map: Dict[str,str] = {}
     for key in ["open","high","low","close","adj close","volume"]:
-        if key in cols: col_map[key] = cols[key]
+        if key in cols:
+            col_map[key] = cols[key]
         else:
             for c in df.columns:
                 if c.lower().startswith(key):
-                    col_map[key] = c; break
+                    col_map[key] = c
+                    break
     out = pd.DataFrame(index=df.index.copy())
     for pretty, raw in (("Open","open"),("High","high"),("Low","low"),("Close","close")):
         if raw in col_map:
@@ -77,25 +83,22 @@ def fetch_ohlcv(symbol: str, yf_period: str, interval: str) -> pd.DataFrame:
     if "volume" in col_map:
         out["Volume"] = pd.to_numeric(df[col_map["volume"]], errors="coerce")
     out = out.dropna(subset=[c for c in ["Open","High","Low","Close"] if c in out.columns])
-    if getattr(out.index, "tz", None) is None: out.index = out.index.tz_localize("UTC")
-    else: out.index = out.index.tz_convert("UTC")
+    if getattr(out.index, "tz", None) is None:
+        out.index = out.index.tz_localize("UTC")
+    else:
+        out.index = out.index.tz_convert("UTC")
     return out
 
-def to_local_ts(ts: pd.Timestamp, local_tz: str = LOCAL_TZ) -> pd.Timestamp:
-    if ts.tzinfo is None: ts = ts.tz_localize("UTC")
-    return ts.tz_convert(ZoneInfo(local_tz))
-
-# --- quick ATR (for SL/TP preview)
-def _true_range(o,h,l,c_prev):
-    return np.maximum.reduce([h-l, np.abs(h-c_prev), np.abs(l-c_prev)])
-
 def atr(df: pd.DataFrame, n: int = 14) -> pd.Series:
-    o,h,l,c = [pd.to_numeric(df[k], errors="coerce") for k in ["Open","High","Low","Close"]]
-    tr = _true_range(o.values, h.values, l.values, c.shift(1).fillna(method="bfill").values)
+    o = pd.to_numeric(df["Open"], errors="coerce")
+    h = pd.to_numeric(df["High"], errors="coerce")
+    l = pd.to_numeric(df["Low"], errors="coerce")
+    c = pd.to_numeric(df["Close"], errors="coerce")
+    prev = c.shift(1).bfill()
+    tr = np.maximum.reduce([(h - l).values, np.abs(h - prev).values, np.abs(l - prev).values])
     s = pd.Series(tr, index=df.index)
     return s.ewm(span=n, adjust=False, min_periods=1).mean()
 
-# --- Strategy signals → markers
 def strat_signals_to_markers(sigs: List[Dict[str,Any]], df: pd.DataFrame) -> List[Dict[str,Any]]:
     out = []
     for s in sigs:
@@ -112,32 +115,41 @@ def strat_signals_to_markers(sigs: List[Dict[str,Any]], df: pd.DataFrame) -> Lis
         })
     return out
 
-# --- Backtrade preview markers
 def preview_markers(ts: pd.Timestamp, entry: float, sl: float, tps: List[float]) -> List[Dict[str,Any]]:
-    m = []
     base = int(ts.timestamp())
-    m.append({"id": f"pv-entry-{base}", "time": base, "position": "inBar", "shape": "circle", "color": "#2563eb", "text": f"ENTRY {entry:.2f}"})
-    m.append({"id": f"pv-sl-{base}", "time": base, "position": "inBar", "shape": "circle", "color": "#ef4444", "text": f"SL {sl:.2f}"})
+    m = [
+        {"id": f"pv-entry-{base}", "time": base, "position": "inBar", "shape": "circle", "color": "#2563eb", "text": f"ENTRY {entry:.2f}"},
+        {"id": f"pv-sl-{base}", "time": base, "position": "inBar", "shape": "circle", "color": "#ef4444", "text": f"SL {sl:.2f}"},
+    ]
     for k, tp in enumerate(tps, start=1):
         m.append({"id": f"pv-tp{k}-{base}", "time": base, "position": "inBar", "shape": "circle", "color": "#10b981", "text": f"TP{k} {tp:.2f}"})
     return m
 
-# ---------------- Settings & Watchlist (normalize BEFORE use) ----------------
 
-def _normalize_watchlist(wl_raw: list[Any]) -> list[dict[str, Any]]:
-    norm: list[dict[str, Any]] = []
-    for item in wl_raw:
+# ---------------- Settings / Watchlist (normalize before use) ----------------
+def _normalize_watchlist(wl_raw: List[Any]) -> List[Dict[str, Any]]:
+    norm: List[Dict[str, Any]] = []
+    for item in wl_raw or []:
         if isinstance(item, dict):
             d = dict(item)
+            d.setdefault("symbol", str(d.get("symbol", d.get("ticker",""))).upper())
+            d.setdefault("enabled", True)
         else:
-            d = {"symbol": str(item), "enabled": True}
-        d.setdefault("enabled", True)
-        norm.append(d)
-    return norm
+            d = {"symbol": str(item).upper(), "enabled": True}
+        if d.get("symbol"):
+            norm.append(d)
+    # de-dupe by symbol, keep first
+    seen = set()
+    out = []
+    for d in norm:
+        s = d["symbol"].upper()
+        if s not in seen:
+            seen.add(s); out.append(d)
+    return out
 
 s = load_settings()
 wl = _normalize_watchlist(s.get("watchlist", []))
-watch_syms = [d.get("symbol", "") for d in wl if d.get("enabled", True)]
+watch_syms = [d["symbol"] for d in wl if d.get("enabled", True)]
 examples = ["AAPL","MSFT","NVDA","SPY","QQQ","BTC-USD","ETH-USD","XAUUSD=X","XAGUSD=X"]
 
 if "scanner_recent" not in st.session_state:
@@ -145,17 +157,19 @@ if "scanner_recent" not in st.session_state:
 if "scanner_symbol" not in st.session_state:
     st.session_state["scanner_symbol"] = (watch_syms[0] if watch_syms else "AAPL")
 
-# ---------------- UI: Symbol picker (quick picks + recent + examples) ----------------
-
 def _pick(sym: str):
     sym = (sym or "").strip().upper()
-    if not sym: return
+    if not sym:
+        return
     st.session_state["scanner_symbol"] = sym
-    rec = st.session_state["scanner_recent"]
-    if sym in rec: rec.remove(sym)
+    rec = list(st.session_state["scanner_recent"])
+    if sym in rec:
+        rec.remove(sym)
     st.session_state["scanner_recent"] = [sym] + rec[:9]
     st.rerun()
 
+
+# ---------------- UI: Symbol picker (quick picks + recent + examples) ----------------
 with st.container():
     st.write("**Symbol**")
     c1, c2, c3 = st.columns([3,1,1])
@@ -165,51 +179,53 @@ with st.container():
                       placeholder="e.g. AAPL, BTC-USD, XAUUSD=X …", label_visibility="collapsed")
     with c2:
         st.button("Scan", use_container_width=True, on_click=_pick,
-                  args=(st.session_state.get("scanner_input",""),))
+                  args=(st.session_state.get("scanner_input",""),),
+                  key="scanner_btn_scan")
     with c3:
-        if st.button("📌 Pin", use_container_width=True):
-            sym = st.session_state.get("scanner_input",""
-            ).strip().upper()
+        if st.button("📌 Pin", use_container_width=True, key="scanner_btn_pin"):
+            sym = st.session_state.get("scanner_input","").strip().upper()
             if sym and sym not in watch_syms:
                 wl.append({"symbol": sym, "asset": "stock", "timeframe": "5m", "adapter": "yfinance", "enabled": True})
                 s["watchlist"] = wl
                 save_settings(s)
                 st.success(f"Added {sym} to watchlist")
-                # refresh local list
-                watch_syms[:] = [d.get("symbol", "") for d in wl if d.get("enabled", True)]
+                # refresh local cache
+                watch_syms = [d["symbol"] for d in _normalize_watchlist(s.get("watchlist", [])) if d.get("enabled", True)]
     if watch_syms:
         st.caption("Quick picks — Watchlist")
         cols = st.columns(min(8, len(watch_syms)))
         for i, sym in enumerate(watch_syms[:24]):
             with cols[i % len(cols)]:
-                st.button(sym, key=f"qp_w_{sym}", on_click=_pick, args=(sym,))
+                st.button(sym, key=f"qp_w_{i}_{sym}", on_click=_pick, args=(sym,))
     if st.session_state["scanner_recent"]:
         st.caption("Recent")
-        cols = st.columns(min(8, len(st.session_state["scanner_recent"])))
-        for i, sym in enumerate(st.session_state["scanner_recent"]):
+        recs = st.session_state["scanner_recent"]
+        cols = st.columns(min(8, len(recs)))
+        for i, sym in enumerate(recs):
             with cols[i % len(cols)]:
-                st.button(sym, key=f"qp_r_{sym}", on_click=_pick, args=(sym,))
+                st.button(sym, key=f"qp_r_{i}_{sym}", on_click=_pick, args=(sym,))
     st.caption("Examples")
     cols = st.columns(min(8, len(examples)))
     for i, sym in enumerate(examples):
         with cols[i % len(cols)]:
-            st.button(sym, key=f"qp_e_{sym}", on_click=_pick, args=(sym,))
+            st.button(sym, key=f"qp_e_{i}_{sym}", on_click=_pick, args=(sym,))
 
-# Current ticker
 ticker = st.session_state["scanner_symbol"]
+
 
 # ---------------- Main controls ----------------
 left, right = st.columns([1,1])
 with left:
-    period_label = st.selectbox("Period", list(PERIOD_OPTIONS.keys()), index=2)  # 1M default
-    interval = st.selectbox("Resolution", INTERVAL_OPTIONS, index=2)  # 5m default
-    show_volume = st.toggle("Show volume", value=True)
+    period_label = st.selectbox("Period", list(PERIOD_OPTIONS.keys()), index=2, key="scanner_period")
+    interval = st.selectbox("Resolution", INTERVAL_OPTIONS, index=2, key="scanner_interval")
+    show_volume = st.toggle("Show volume", value=True, key="scanner_showvol")
 with right:
     st.markdown("**Engines**")
-    show_patterns = st.checkbox("Show candlestick/classical patterns", value=True)
-    show_strats = st.checkbox("Show strategy signals", value=True)
+    show_patterns = st.checkbox("Show candlestick/classical patterns", value=True, key="scanner_showpat")
+    show_strats = st.checkbox("Show strategy signals", value=True, key="scanner_showstrat")
 
-# Patterns config
+
+# ---------------- Patterns config ----------------
 if "patterns_state" not in st.session_state:
     st.session_state["patterns_state"] = {}
 pkey = f"{ticker}@{interval}"
@@ -221,12 +237,11 @@ pst = st.session_state["patterns_state"].setdefault(
 
 if show_patterns:
     with st.expander("Pattern Controls", expanded=False):
-        pst["enabled"] = st.toggle("Enable pattern engine", value=bool(pst.get("enabled", True)))
-        # clamp min_conf into [0,1]
+        pst["enabled"] = st.toggle("Enable pattern engine", value=bool(pst.get("enabled", True)), key=f"pat_on_{pkey}")
         mc = float(pst.get("min_conf", 0.6))
         mc = max(0.0, min(1.0, mc))
-        pst["min_conf"] = float(st.slider("Only alert if confidence ≥", 0.0, 1.0, mc, 0.05))
-        if st.button("Restore default thresholds"):
+        pst["min_conf"] = float(st.slider("Only alert if confidence ≥", 0.0, 1.0, mc, 0.05, key=f"pat_min_{pkey}"))
+        if st.button("Restore default thresholds", key=f"pat_rst_{pkey}"):
             pst["cfg"] = PAT_DEFAULTS.copy()
             st.success("Pattern thresholds restored.")
         all_names = [
@@ -238,20 +253,22 @@ if show_patterns:
             "Tasuki Up","Tasuki Down","Kicker Bull","Kicker Bear","Rising Three Methods","Falling Three Methods","Mat Hold",
         ]
         chosen = set(pst.get("enabled_names", []))
-        sel = []
+        sel: List[str] = []
         cols = st.columns(3)
         for i, nm in enumerate(all_names):
             with cols[i % 3]:
-                if st.checkbox(nm, value=(nm in chosen), key=f"pat_{pkey}_{nm}"):
+                if st.checkbox(nm, value=(nm in chosen), key=f"pat_{pkey}_{i}_{nm}"):
                     sel.append(nm)
         pst["enabled_names"] = sel
 
-# -------- Strategy selection: single, safe multiselect (no duplicate blocks) --------
+
+# ---------------- Strategies selection ----------------
 cat = get_catalog()
 cat_names = sorted({v["name"] for v in cat.values()})
 enabled_block = s.get("strategies", {}).get("enabled", {})
+if isinstance(enabled_block, list):  # legacy shape
+    enabled_block = {n: {"enabled": True, "params": {}, "approved": True} for n in enabled_block}
 enabled_names = [n for n, row in enabled_block.items() if row.get("enabled", True)]
-
 valid_defaults = sorted([n for n in enabled_names if n in cat_names])
 ignored = sorted([n for n in enabled_names if n not in cat_names])
 
@@ -273,7 +290,6 @@ with st.expander("Strategy Signals (select to compute locally)", expanded=False)
         row = dict(enabled_block.get(nm, {"enabled": True, "params": {}, "approved": True}))
         row["enabled"] = True
         new_enabled[nm] = row
-    # disable any previously-enabled known items that were unselected
     for nm in enabled_names:
         if (nm in cat_names) and (nm not in sel_strats):
             row = dict(enabled_block.get(nm, {"enabled": False, "params": {}, "approved": True}))
@@ -284,32 +300,33 @@ with st.expander("Strategy Signals (select to compute locally)", expanded=False)
     s["strategies"]["enabled"] = new_enabled
     save_settings(s)
 
-# re-read after save for param lookup below
 s_enabled = s.get("strategies", {}).get("enabled", {})
 
-# --------------- Data fetch ---------------
+
+# ---------------- Data fetch ----------------
 yf_period, clamp_msg = clamp_period_for_interval(period_label, interval)
-if clamp_msg: st.info(clamp_msg)
+if clamp_msg:
+    st.info(clamp_msg)
 
 df = fetch_ohlcv(ticker, yf_period, interval)
 if df.empty:
     st.warning("No data returned for this selection.")
     st.stop()
 
-# Limit to recent for compute
 N = min(len(df), 400)
 df_slice = df.iloc[-N:].copy()
 
-# --------------- Detect patterns ---------------
+
+# ---------------- Detect patterns ----------------
 hits = []
-pat_markers: list[dict[str, Any]] = []
+pat_markers: List[Dict[str, Any]] = []
 if show_patterns and pst.get("enabled", True) and pst.get("enabled_names"):
     try:
         hits = detect_all(df_slice, pst["enabled_names"], pst["cfg"])
         hits = [h for h in hits if h.confidence >= float(pst.get("min_conf", 0.6))]
     except Exception as e:
         st.error(f"Pattern detection failed: {e}")
-# Shift to full DF index & markers
+
 if hits:
     offset = len(df) - len(df_slice)
     for h in hits:
@@ -317,10 +334,11 @@ if hits:
         h.bars = [b + offset for b in h.bars]
     pat_markers = hits_to_markers(hits, df)
 
-# --------------- Detect strategy signals ---------------
+
+# ---------------- Detect strategy signals ----------------
 strat_hits: List[Dict[str,Any]] = []
-if show_strats and sel_strats:
-    for nm in sel_strats:
+if show_strats:
+    for nm in st.session_state.get(f"strats_{ticker}_{interval}", []):
         params = s_enabled.get(nm, {}).get("params", {})
         try:
             strat = build_strategy(nm, params)
@@ -343,7 +361,6 @@ if show_strats and sel_strats:
         except Exception as e:
             st.warning(f"{nm} failed: {e}")
 
-# shift indices to full DF
 if strat_hits:
     offset = len(df) - len(df_slice)
     for sh in strat_hits:
@@ -352,8 +369,9 @@ if strat_hits:
 
 strat_markers = strat_signals_to_markers(strat_hits, df)
 
-# --------------- Optional backtrade preview (pick one row) ---------------
-preview: list[dict[str, Any]] = []
+
+# ---------------- Optional backtrade preview ----------------
+preview: List[Dict[str, Any]] = []
 with st.expander("Backtrade preview (pick one row below)"):
     pick_src = st.radio("Source", ["Strategy", "Pattern"], horizontal=True, key=f"picksrc_{ticker}_{interval}")
     if pick_src == "Strategy" and strat_hits:
@@ -363,13 +381,11 @@ with st.expander("Backtrade preview (pick one row below)"):
         i = sel["idx"]; side = sel["side"]
         a = atr(df)
         entry = float(df["Close"].iat[i])
-        risk = float(1.5 * a.iat[i])
+        risk_val = float(1.5 * a.iat[i])
         if side == "long":
-            sl = entry - risk
-            tps = [entry + 2*risk]
+            sl = entry - risk_val; tps = [entry + 2*risk_val]
         else:
-            sl = entry + risk
-            tps = [entry - 2*risk]
+            sl = entry + risk_val; tps = [entry - 2*risk_val]
         preview = preview_markers(df.index[i], entry, sl, tps)
         st.caption(f"Preview → Entry {entry:.2f}, SL {sl:.2f}, TP1 {tps[0]:.2f}")
     elif pick_src == "Pattern" and hits:
@@ -380,17 +396,18 @@ with st.expander("Backtrade preview (pick one row below)"):
         side = "long" if hsel.direction.lower().startswith("bull") else "short"
         a = atr(df)
         entry = float(df["Close"].iat[i])
-        risk = float(1.5 * a.iat[i])
+        risk_val = float(1.5 * a.iat[i])
         if side == "long":
-            sl = entry - risk; tps = [entry + 2*risk]
+            sl = entry - risk_val; tps = [entry + 2*risk_val]
         else:
-            sl = entry + risk; tps = [entry - 2*risk]
+            sl = entry + risk_val; tps = [entry - 2*risk_val]
         preview = preview_markers(df.index[i], entry, sl, tps)
         st.caption(f"Preview → Entry {entry:.2f}, SL {sl:.2f}, TP1 {tps[0]:.2f}")
     else:
         st.caption("No rows yet.")
 
-# --------------- Render chart ---------------
+
+# ---------------- Render chart ----------------
 ohlcv_payload = [
     dict(time=int(ts.timestamp()), open=float(o), high=float(h), low=float(l),
          close=float(c), volume=float(v) if ("Volume" in df and show_volume) else None)
@@ -399,7 +416,7 @@ ohlcv_payload = [
         (df["Volume"] if "Volume" in df else [0]*len(df))
     )
 ]
-markers: list[dict[str, Any]] = []
+markers: List[Dict[str, Any]] = []
 if show_patterns: markers += pat_markers
 if show_strats:   markers += strat_markers
 if preview:       markers += preview
@@ -417,7 +434,8 @@ _ = st_trading_draw(
     key=f"scanner_draw_{ticker}_{interval}",
 )
 
-# --------------- Tables ---------------
+
+# ---------------- Tables ----------------
 cA, cB = st.columns(2)
 
 with cA:
@@ -430,7 +448,7 @@ with cA:
         } for h in strat_hits])
         st.dataframe(df_s, use_container_width=True, height=320)
         st.download_button("Export strategy signals CSV", df_s.to_csv(index=False),
-                           file_name=f"scanner_strat_{ticker}_{interval}.csv")
+                           file_name=f"scanner_strat_{ticker}_{interval}.csv", key=f"dl_strat_{ticker}_{interval}")
     else:
         st.caption("No strategy signals at current settings.")
 
@@ -451,6 +469,6 @@ with cB:
         df_hits = pd.DataFrame(rows)
         st.dataframe(df_hits, use_container_width=True, height=320)
         st.download_button("Export pattern hits CSV", df_hits.to_csv(index=False),
-                           file_name=f"scanner_patterns_{ticker}_{interval}.csv")
+                           file_name=f"scanner_patterns_{ticker}_{interval}.csv", key=f"dl_pats_{ticker}_{interval}")
     else:
         st.caption("No patterns at current settings.")
