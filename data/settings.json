@@ -1,66 +1,94 @@
 {
-  "watchlist": [],
+  "watchlist": [
+    "ARB-USD",
+    "SOL-USD",
+    "RHM.DE",
+    "NOVO-B.CO",
+    "TRLY",
+    "TLRY"
+  ],
+  "timeframes": [
+    "1m",
+    "5m",
+    "15m",
+    "1H",
+    "1D"
+  ],
+  "dashboard": {
+    "persist": true,
+    "layout": [
+      {
+        "type": "Chart",
+        "symbol": "AAPL",
+        "timeframe": "1D",
+        "studies": {
+          "ema": [
+            20,
+            50,
+            200
+          ],
+          "bbands": {
+            "length": 20,
+            "stdev": 2.0
+          },
+          "vwap": true
+        },
+        "compare": []
+      },
+      {
+        "type": "Chart",
+        "symbol": "AAPL",
+        "timeframe": "1H",
+        "studies": {
+          "ema": [
+            9,
+            21,
+            50
+          ]
+        },
+        "compare": []
+      },
+      {
+        "type": "Metrics",
+        "symbol": "AAPL",
+        "timeframe": "15m"
+      },
+      {
+        "type": "Backtest",
+        "symbol": "AAPL",
+        "timeframe": "1D",
+        "strategies": [
+          "EMA50/200 Golden Cross",
+          "RSI Mean Revert",
+          "Breakout 20-High"
+        ]
+      }
+    ]
+  },
   "strategies": {
     "enabled": {
+      "Candlestick Patterns": {
+        "enabled": true,
+        "params": {},
+        "approved": true
+      },
       "EMA20/50 Pullback": {
         "enabled": true,
         "params": {},
         "approved": true
       },
       "MACD Trend": {
-        "enabled": false,
+        "enabled": true,
         "params": {},
         "approved": true
       },
       "Range Breakout": {
-        "enabled": false,
-        "params": {
-          "lookback": 20,
-          "retest": 5
-        },
-        "approved": true
-      },
-      "Bullish Engulfing": {
         "enabled": true,
-        "params": {},
-        "approved": true
-      },
-      "Bearish Engulfing": {
-        "enabled": true,
-        "params": {},
-        "approved": true
-      },
-      "Hammer": {
-        "enabled": true,
-        "params": {},
-        "approved": true
-      },
-      "Inverted Hammer": {
-        "enabled": true,
-        "params": {},
-        "approved": true
-      },
-      "Hanging Man": {
-        "enabled": true,
-        "params": {},
-        "approved": true
-      },
-      "Shooting Star": {
-        "enabled": false,
-        "params": {},
-        "approved": true
-      },
-      "Tweezer Top": {
-        "enabled": false,
-        "params": {},
-        "approved": true
-      },
-      "Tweezer Bottom": {
-        "enabled": false,
         "params": {},
         "approved": true
       }
     },
+    "params": {},
     "big_boss": {
       "enabled": true,
       "k_bars": 3,
@@ -69,8 +97,10 @@
     "min_conf": 0.55
   },
   "risk": {
-    "equity": 10000.01,
     "risk_pct": 0.1,
+    "commission_bps": 1.0,
+    "slippage_bps": 2.0,
+    "equity": 10000.01,
     "atr_mult_sl": 1.5,
     "rr": 2.0,
     "tp_count": 2,

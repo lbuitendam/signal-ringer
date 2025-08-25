@@ -1,57 +1,276 @@
-# app.py
-# Streamlit + Lightweight-Charts component with Indicators, Drawing Tools, and Pattern Detection
+# app.py — Signal-Ringer 4-Tile Dashboard
+
 from __future__ import annotations
 
-import math
 import json
 from datetime import datetime, timezone
-from typing import Optional, Tuple
+from pathlib import Path
+from typing import Any, Dict, List, Tuple
 from uuid import uuid4
-from zoneinfo import ZoneInfo
-from streamlit_autorefresh import st_autorefresh
-import logging
+
 import numpy as np
 import pandas as pd
 import streamlit as st
-import yfinance as yf
+from streamlit_autorefresh import st_autorefresh
 
-from st_trading_draw import st_trading_draw
-
-# --- your sidebar + utils ---
-from ui.sidebar import sidebar, load_settings
-# --- engine singleton + storage ---
-from engine.singleton import get_engine
-from alerts.messages import maybe_toast, csv_log
+from ui.sidebar import sidebar
+from alerts.messages import maybe_toast
 from risk.manager import RiskOptions
-
+from storage import init_db, fetch_alerts, export_csv, insert_journal, fetch_journal
 from patterns.engine import (
     DEFAULT_CONFIG as PAT_DEFAULTS,
     detect_all,
     hits_to_markers,
 )
 
-from storage import init_db, fetch_alerts, export_csv, insert_journal, fetch_journal
+# -------- Optional / graceful imports --------
+try:
+    import yfinance as yf
+except Exception:
+    yf = None  # Fallback stubs used below
 
-# ---- Logging: quiet by default ----
-logging.basicConfig(level=logging.ERROR, format="%(levelname)s:%(name)s:%(message)s")
-logging.getLogger("yfinance").setLevel(logging.ERROR)
-logging.getLogger("signal_ringer.engine").setLevel(logging.ERROR)
+try:
+    from st_trading_draw import st_trading_draw as tv_chart
+except Exception:
+    tv_chart = None
 
+try:
+    from engine.singleton import get_engine  # noqa: F401
+except Exception:
+    get_engine = None
+
+try:
+    from strategies.catalog import get_catalog as get_strategy_catalog  # returns {sid:{name, class,...}}
+except Exception:
+    get_strategy_catalog = None
+
+# ---------------------- Page config ----------------------
 st.set_page_config(
+    page_title="Signal-Ringer — Dashboard",
     layout="wide",
-    page_title="Signal Ringer — Multi-symbol Paper Bot",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
-# ---------- init ----------
+DATA_DIR = Path("data")
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+SETTINGS_PATH = DATA_DIR / "settings.json"
+
+# ---------------------- Defaults ----------------------
+DEFAULTS: Dict[str, Any] = {
+    "watchlist": ["AAPL", "MSFT", "BTC-USD", "ETH-USD", "XAUUSD=X", "XAGUSD=X"],
+    "timeframes": ["1m", "5m", "15m", "1H", "1D"],
+    "dashboard": {
+        "persist": True,
+        "layout": [
+            {
+                "type": "Chart",
+                "symbol": "AAPL",
+                "timeframe": "1D",
+                "studies": {"ema": [20, 50, 200], "bbands": {"length": 20, "stdev": 2.0}, "vwap": True},
+                "compare": [],
+            },
+            {
+                "type": "Chart",
+                "symbol": "AAPL",
+                "timeframe": "1H",
+                "studies": {"ema": [9, 21, 50]},
+                "compare": [],
+            },
+            {"type": "Metrics", "symbol": "AAPL", "timeframe": "15m"},
+            {
+                "type": "Backtest",
+                "symbol": "AAPL",
+                "timeframe": "1D",
+                "strategies": ["EMA50/200 Golden Cross", "RSI Mean Revert", "Breakout 20-High"],
+            },
+        ],
+    },
+    "strategies": {"enabled": ["EMA50/200 Golden Cross", "RSI Mean Revert", "Breakout 20-High"], "params": {}},
+    "risk": {"risk_pct": 1.0, "commission_bps": 1.0, "slippage_bps": 2.0},
+}
+
+# ---------------------- Settings IO ----------------------
+def _deep_merge(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(a)
+    for k, v in b.items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = _deep_merge(out[k], v)
+        else:
+            out[k] = v
+    return out
+
+
+def _coerce_symbols(seq) -> List[str]:
+    out: List[str] = []
+    for x in (seq or []):
+        if isinstance(x, dict):
+            sym = x.get("symbol") or x.get("ticker") or ""
+        else:
+            sym = x
+        s = str(sym).strip().upper()
+        if s:
+            out.append(s)
+    return out
+
+
+def load_settings() -> Dict[str, Any]:
+    if SETTINGS_PATH.exists():
+        try:
+            disk = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+            merged = _deep_merge(DEFAULTS, disk)
+            # sanitize watchlist (avoid dicts -> unhashable)
+            merged["watchlist"] = _coerce_symbols(merged.get("watchlist"))
+            return merged
+        except Exception:
+            pass
+    return json.loads(json.dumps(DEFAULTS))
+
+
+def save_settings(s: Dict[str, Any]) -> None:
+    SETTINGS_PATH.write_text(json.dumps(s, indent=2), encoding="utf-8")
+
+
+SETTINGS: Dict[str, Any] = load_settings()
+
+# ---------- Engine / DB / Sidebar integration ----------
 init_db()
-eng = get_engine()
+eng = get_engine() if get_engine else None
 st.session_state.setdefault("seen_alert_ids", set())
 st.session_state.setdefault("autorefresh_sec", 8)
+if "patterns_state" not in st.session_state:
+    st.session_state["patterns_state"] = {}
+if "drawings" not in st.session_state:
+    st.session_state["drawings"] = {}
 
-st.title("📈 Signal Ringer — Paper Trade Suggestions")
+nav, wl, opts, risk, qc = sidebar()
 
-# Top nav (use Streamlit-native links so they work everywhere)
+# Clamp & configure risk safely
+rp = float(risk.get("risk_pct", 0.01))
+if rp > 1:
+    rp /= 100.0
+risk_opts = RiskOptions(**{**risk, "risk_pct": max(0.0005, min(0.10, rp))})
+
+if eng:
+    eng.configure(
+        trackers=wl,
+        strategies_cfg=opts,
+        risk_opts=risk_opts,
+        interval_sec=float(st.session_state["autorefresh_sec"]),
+    )
+
+# Auto-refresh while engine is running
+if eng and (eng.is_running() or qc.get("engine_on")):
+    st_autorefresh(interval=int(st.session_state["autorefresh_sec"]) * 1000, key="live_refresh")
+
+# ---------------------- Data / Indicators ----------------------
+INTERVAL_MAP = {"1m": "1m", "5m": "5m", "15m": "15m", "1H": "60m", "1D": "1d"}
+PERIOD_BY_TIMEFRAME = {"1m": "7d", "5m": "60d", "15m": "60d", "1H": "730d", "1D": "5y"}
+
+
+@st.cache_data(show_spinner=False, ttl=60)
+def fetch_ohlcv(symbol: str, timeframe: str) -> pd.DataFrame:
+    if yf is None:
+        return pd.DataFrame()
+    interval = INTERVAL_MAP.get(timeframe, "1d")
+    period = PERIOD_BY_TIMEFRAME.get(timeframe, "1y")
+    try:
+        df = yf.download(symbol, period=period, interval=interval, auto_adjust=False, progress=False)
+    except Exception:
+        return pd.DataFrame()
+    if df is None or df.empty:
+        return pd.DataFrame()
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = [c[0] if isinstance(c, tuple) else str(c) for c in df.columns]
+    # Normalize
+    cols = {c.lower(): c for c in df.columns}
+    need = {}
+    for k in ["open", "high", "low", "close", "adj close", "volume"]:
+        if k in cols:
+            need[k] = cols[k]
+        else:
+            for c in df.columns:
+                if c.lower().startswith(k):
+                    need[k] = c
+                    break
+    out = pd.DataFrame(index=df.index.copy())
+    for pretty, raw in (("Open", "open"), ("High", "high"), ("Low", "low"), ("Close", "close")):
+        if raw in need:
+            out[pretty] = pd.to_numeric(df[need[raw]], errors="coerce")
+    if "volume" in need:
+        out["Volume"] = pd.to_numeric(df[need["volume"]], errors="coerce")
+    out = out.dropna(subset=[c for c in ["Open", "High", "Low", "Close"] if c in out.columns])
+    if getattr(out.index, "tz", None) is None:
+        out.index = out.index.tz_localize("UTC")
+    else:
+        out.index = out.index.tz_convert("UTC")
+    return out
+
+
+def ema(s: pd.Series, n: int) -> pd.Series:
+    return pd.to_numeric(s, errors="coerce").ewm(span=n, adjust=False, min_periods=1).mean()
+
+
+def rsi(close: pd.Series, n: int = 14) -> pd.Series:
+    c = pd.to_numeric(close, errors="coerce")
+    d = c.diff()
+    g = d.clip(lower=0.0).rolling(n).mean()
+    l = (-d.clip(upper=0.0)).rolling(n).mean()
+    rs = g / l.replace(0.0, np.nan)
+    return 100 - (100 / (1 + rs))
+
+
+def macd(close: pd.Series, f: int = 12, s: int = 26, sig: int = 9) -> Tuple[pd.Series, pd.Series, pd.Series]:
+    fast = ema(close, f)
+    slow = ema(close, s)
+    mac = fast - slow
+    sigl = ema(mac, sig)
+    hist = mac - sigl
+    return mac, sigl, hist
+
+
+def _true_range(high: pd.Series, low: pd.Series, close: pd.Series) -> pd.Series:
+    c_prev = close.shift(1).bfill()
+    x = pd.concat(
+        [
+            (high - low),
+            (high - c_prev).abs(),
+            (low - c_prev).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
+    return x
+
+
+def atr(df: pd.DataFrame, n: int = 14) -> pd.Series:
+    tr = _true_range(df["High"], df["Low"], df["Close"])
+    return tr.ewm(span=n, adjust=False, min_periods=1).mean()
+
+
+def bbands(close: pd.Series, length: int = 20, stdev: float = 2.0) -> Tuple[pd.Series, pd.Series, pd.Series, pd.Series]:
+    ma = close.rolling(length).mean()
+    sd = close.rolling(length).std()
+    upper = ma + stdev * sd
+    lower = ma - stdev * sd
+    width = (upper - lower) / ma.replace(0.0, np.nan)
+    return ma, upper, lower, width
+
+
+def stoch_k(df: pd.DataFrame, n: int = 14, smooth: int = 3) -> pd.Series:
+    ll = df["Low"].rolling(n).min()
+    hh = df["High"].rolling(n).max()
+    k = 100 * (df["Close"] - ll) / (hh - ll).replace(0.0, np.nan)
+    return k.rolling(smooth).mean()
+
+
+def ema_slope(close: pd.Series, n: int = 50) -> pd.Series:
+    e = ema(close, n)
+    return e.diff()
+
+
+# ---------------------- UI Helpers ----------------------
+TILE_TYPES = ["Chart", "Scanner", "Backtest", "Journal", "Metrics"]
+TIMEFRAMES = ["1m", "5m", "15m", "1H", "1D"]
+
 nav_cols = st.columns(5)
 with nav_cols[0]:
     st.page_link("app.py", label="Dashboard")
@@ -64,827 +283,682 @@ with nav_cols[3]:
 with nav_cols[4]:
     st.page_link("pages/4_User_Settings.py", label="User Settings")
 
-nav, wl, opts, risk, qc = sidebar()
 
-# Clamp Risk % if settings.json is bad (prevents the 10.0>0.1 crash elsewhere)
-risk_sane = dict(risk)
-try:
-    rp = float(risk_sane.get("risk_pct", 0.01))
-except Exception:
-    rp = 0.01
-risk_sane["risk_pct"] = max(0.0005, min(0.10, rp))  # keep between 0.05% and 10%
-
-# Configure engine every rerun (cheap; thread reads atomically)
-eng.configure(
-    trackers=wl,
-    strategies_cfg=opts,
-    risk_opts=RiskOptions(**risk_sane),
-    interval_sec=float(st.session_state.get("autorefresh_sec", 8)),
-)
-
-# Auto-refresh while engine runs (non-blocking)
-if eng.is_running() or qc.get("engine_on"):
-    st_autorefresh(
-        interval=int(st.session_state.get("autorefresh_sec", 8)) * 1000,
-        key="live_refresh",
-    )
-
-# --------- legacy CSV log (kept for compatibility) ----------
-log_rows: list[dict] = []
-placeholder = st.empty()
-log_table = st.empty()
-
-# ==================== CHART / INDICATORS / PATTERNS ====================
-# -------------------- Config --------------------
-LOCAL_TZ = "Europe/Berlin"
-
-# -------------------- Sidebar (choose data first) --------------------
-ASSET_CLASSES = ["Stocks", "ETFs", "Forex", "Crypto", "Commodities (Futures)"]
-DEFAULT_BY_CLASS = {
-    "Stocks": "AAPL",
-    "ETFs": "SPY",
-    "Forex": "EURUSD=X",
-    "Crypto": "BTC-USD",
-    "Commodities (Futures)": "GC=F",
-}
-EXAMPLES_BY_CLASS = {
-    "Stocks": "Examples: AAPL, MSFT, NVDA, TSLA",
-    "ETFs": "Examples: SPY, QQQ, IWM, EEM",
-    "Forex": "Examples: EURUSD=X, USDJPY=X, GBPUSD=X, AUDUSD=X",
-    "Crypto": "Examples: BTC-USD, ETH-USD, SOL-USD",
-    "Commodities (Futures)": "Examples: CL=F, NG=F, SI=F, ZC=F",
-}
-PERIOD_OPTIONS = {
-    "1D": "1d",
-    "5D": "5d",
-    "1M": "1mo",
-    "3M": "3mo",
-    "6M": "6mo",
-    "YTD": "ytd",
-    "1Y": "1y",
-    "2Y": "2y",
-    "5Y": "5y",
-    "10Y": "10y",
-    "Max": "max",
-}
-INTERVAL_OPTIONS = ["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1d", "5d", "1wk", "1mo"]
-
-with st.sidebar:
-    st.header("Chart Settings")
-    asset_class = st.selectbox("Asset Class", ASSET_CLASSES, index=0)
-    default_symbol = DEFAULT_BY_CLASS[asset_class]
-    st.caption(EXAMPLES_BY_CLASS[asset_class])
-
-    ticker = st.text_input("Ticker / Symbol", value=default_symbol).strip()
-    period_label = st.selectbox("Period", list(PERIOD_OPTIONS.keys()), index=0)
-    interval = st.selectbox("Resolution", INTERVAL_OPTIONS, index=2)  # 5m default
-    show_volume = st.toggle("Show volume", value=True)
-
-if not ticker:
-    st.stop()
-
-# -------------------- Indicator state scaffolding --------------------
-if "gapless" not in st.session_state:
-    st.session_state["gapless"] = True  # placeholder
-
-OVERLAY_TYPES = {"SMA", "EMA", "BB", "VWAP"}
-DEFAULT_PARAMS = {
-    "SMA": {"period": 20, "source": "close"},
-    "EMA": {"period": 50, "source": "close"},
-    "RSI": {"period": 14},
-    "MACD": {"fast": 12, "slow": 26, "signal": 9},
-    "BB": {"period": 20, "stddev": 2.0, "source": "close"},
-    "VWAP": {"session": "daily"},
-}
-SOURCE_CHOICES = ["close", "open", "hlc3", "ohlc4"]
-LINE_STYLES = {"Solid": None, "Dash": "dash", "Dot": "dot", "DashDot": "dashdot"}
-DASH_MAP = {"Solid": "solid", "Dash": "dash", "Dot": "dot", "DashDot": "dash"}
-
-def _profile_key(t: str, iv: str) -> str:
-    return f"{t}@{iv}"
-
-if "indicators_store" not in st.session_state:
-    st.session_state["indicators_store"] = {}
-
-prof_key = _profile_key(ticker, interval)
-if prof_key not in st.session_state["indicators_store"]:
-    st.session_state["indicators_store"][prof_key] = []
-ind_list = st.session_state["indicators_store"][prof_key]
-
-def add_indicator(kind: str):
-    inst = {
-        "id": str(uuid4()),
-        "type": kind,
-        "params": DEFAULT_PARAMS[kind].copy(),
-        "color": "#33cccc" if kind in {"SMA", "EMA", "VWAP"} else ("#ffa600" if kind == "BB" else "#1f77b4"),
-        "style": "Solid",
-        "visible": True,
-        "pane": "overlay" if kind in OVERLAY_TYPES else "sub",
-        "scope": {"ticker": ticker, "interval": interval},
-    }
-    ind_list.append(inst)
-
-def remove_indicator(ind_id: str):
-    st.session_state["indicators_store"][prof_key] = [i for i in ind_list if i["id"] != ind_id]
-
-# -------------------- Top bar + Options --------------------
-st.markdown(
-    """
-<style>
-  .topbar { position: sticky; top: 0; z-index: 9999;
-            background: #0e1117; border-bottom: 1px solid #222; padding: 8px 12px; }
-  .topbar-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .topbar-title { font-weight: 600; font-size: 16px; color: #e5e7eb; margin: 0; }
-</style>
-""",
-    unsafe_allow_html=True,
-)
-st.markdown('<div class="topbar"><div class="topbar-row">', unsafe_allow_html=True)
-col_left, col_right = st.columns([1, 1])
-with col_left:
-    st.markdown('<p class="topbar-title">Signal Ringer — Chart</p>', unsafe_allow_html=True)
-with col_right:
-    pop = st.popover("Options")
-    with pop:
-        # Drawing options for the component
-        st.markdown("#### Drawing Tools")
-        enable_draw = st.toggle("Enable chart component", value=True, help="Uses the React lightweight-charts component.")
-        magnet = st.toggle("Magnet snap to candles", value=True)
-        st.caption("Export / Import drawings (JSON) are below the chart.")
-
-        st.divider()
-
-        # Indicators UI
-        st.markdown("#### Indicators")
-        cols = st.columns([2, 1])
-        with cols[0]:
-            new_kind = st.selectbox("Add Indicator", ["SMA", "EMA", "RSI", "MACD", "BB", "VWAP"], key="add_kind")
-        with cols[1]:
-            if st.button("Add", type="primary", use_container_width=True):
-                add_indicator(new_kind)
-
-        st.markdown("##### Current Indicators")
-        if not ind_list:
-            st.caption("No indicators yet. Add one above.")
-        else:
-            for ind in list(ind_list):
-                with st.container(border=True):
-                    top = st.columns([1.2, 0.9, 0.7, 0.8, 0.7, 0.5])
-                    with top[0]:
-                        st.markdown(f"**{ind['type']}** · `{ind['pane']}`")
-                    with top[1]:
-                        ind["visible"] = st.checkbox("Show", value=ind["visible"], key=f"vis_{ind['id']}")
-                    with top[2]:
-                        ind["color"] = st.color_picker("Color", value=ind["color"], key=f"col_{ind['id']}")
-                    with top[3]:
-                        ind["style"] = st.selectbox("Line", list(LINE_STYLES.keys()), index=0, key=f"sty_{ind['id']}")
-                    with top[4]:
-                        allowed = ["overlay", "sub"] if ind["type"] not in {"RSI", "MACD"} else ["sub"]
-                        ind["pane"] = st.selectbox(
-                            "Pane", allowed, index=allowed.index(ind["pane"]), key=f"pane_{ind['id']}",
-                        )
-                    with top[5]:
-                        if st.button("Delete", key=f"del_{ind['id']}", use_container_width=True):
-                            remove_indicator(ind["id"])
-                            st.experimental_rerun()
-
-                    # parameter editors
-                    if ind["type"] in {"SMA", "EMA", "BB"}:
-                        c = st.columns([1, 1, 1])
-                        ind["params"]["period"] = int(
-                            c[0].number_input("Period", 1, 5000, int(ind["params"]["period"]), key=f"per_{ind['id']}")
-                        )
-                        ind["params"]["source"] = c[1].selectbox(
-                            "Source",
-                            SOURCE_CHOICES,
-                            index=SOURCE_CHOICES.index(ind["params"].get("source", "close")),
-                            key=f"src_{ind['id']}",
-                        )
-                        if ind["type"] == "BB":
-                            ind["params"]["stddev"] = float(
-                                c[2].number_input("Std Dev", 0.1, 10.0, float(ind["params"]["stddev"]), 0.1, key=f"std_{ind['id']}")
-                            )
-                    elif ind["type"] == "RSI":
-                        ind["params"]["period"] = int(
-                            st.number_input("Period", 2, 5000, int(ind["params"]["period"]), key=f"per_{ind['id']}")
-                        )
-                    elif ind["type"] == "MACD":
-                        c = st.columns(3)
-                        ind["params"]["fast"] = int(
-                            c[0].number_input("Fast", 1, 1000, int(ind["params"]["fast"]), key=f"fast_{ind['id']}")
-                        )
-                        ind["params"]["slow"] = int(
-                            c[1].number_input("Slow", 2, 2000, int(ind["params"]["slow"]), key=f"slow_{ind['id']}")
-                        )
-                        ind["params"]["signal"] = int(
-                            c[2].number_input("Signal", 1, 1000, int(ind["params"]["signal"]), key=f"sig_{ind['id']}")
-                        )
-                        if ind["params"]["fast"] >= ind["params"]["slow"]:
-                            st.warning("Fast must be < Slow.")
-
-        st.divider()
-        # ------------- Patterns -------------
-        st.markdown("#### Patterns")
-        pkey = f"{ticker}@{interval}"
-        if "patterns_state" not in st.session_state:
-            st.session_state["patterns_state"] = {}
-        pst = st.session_state["patterns_state"].setdefault(
-            pkey,
-            {
-                "enabled": True,
-                "min_conf": PAT_DEFAULTS["min_confidence"],
-                "enabled_names": [],
-                "cfg": PAT_DEFAULTS.copy(),
-                "last_alert_idx": {},
-            },
-        )
-
-        colsP = st.columns([1, 1])
-        with colsP[0]:
-            pst["enabled"] = st.toggle("Enable pattern engine", value=bool(pst["enabled"]))
-        with colsP[1]:
-            pst["min_conf"] = float(st.slider("Only alert if confidence ≥", 0.0, 1.0, float(pst["min_conf"]), 0.05))
-
-        if st.button("Restore default thresholds"):
-            pst["cfg"] = PAT_DEFAULTS.copy()
-            st.success("Pattern thresholds restored.")
-
-with st.expander("Select patterns"):
-    all_names = [
-        "Hammer","Inverted Hammer","Bullish Engulfing","Bearish Engulfing","Doji",
-        "Morning Star","Evening Star","Bullish Harami","Bearish Harami","Tweezer Top","Tweezer Bottom",
-        "Head & Shoulders","Inverse Head & Shoulders","Piercing Line","Dark Cloud Cover",
-        "Three White Soldiers","Three Black Crows","Three Inside Up","Three Inside Down",
-        "Three Outside Up","Three Outside Down","Marubozu","Rising Window","Falling Window",
-        "Tasuki Up","Tasuki Down","Kicker Bull","Kicker Bear","Rising Three Methods","Falling Three Methods","Mat Hold",
-    ]
-    chosen = set(st.session_state["patterns_state"][f"{ticker}@{interval}"]["enabled_names"]
-                 if "patterns_state" in st.session_state and f"{ticker}@{interval}" in st.session_state["patterns_state"]
-                 else [])
-    new_selected = []
-    for nm in all_names:
-        val = st.checkbox(nm, value=(nm in chosen), key=f"pat_{nm}")
-        if val:
-            new_selected.append(nm)
-    st.session_state["patterns_state"][f"{ticker}@{interval}"]["enabled_names"] = new_selected
-
-st.markdown("</div></div>", unsafe_allow_html=True)
-
-# -------------------- Time & Period helpers --------------------
-def _days_since_jan1_now() -> int:
-    now = datetime.now(timezone.utc)
-    jan1 = datetime(now.year, 1, 1, tzinfo=timezone.utc)
-    return max(1, (now - jan1).days)
-
-def _period_days(yf_period: str) -> float:
-    return {
-        "1d": 1, "5d": 5, "1w": 7, "1mo": 30, "3mo": 91, "6mo": 182,
-        "ytd": float(_days_since_jan1_now()), "1y": 365, "2y": 730, "5y": 1825, "10y": 3650,
-    }.get(yf_period, math.inf)
-
-def clamp_period_for_interval(period_key: str, interval: str) -> Tuple[str, Optional[str]]:
-    yf_period = PERIOD_OPTIONS.get(period_key, "1d")
-    days = _period_days(yf_period)
-    if interval == "1m" and days > 7:
-        return "7d", "1m data limited to last 7 days; period clamped to 7d."
-    if interval in {"2m", "5m", "15m", "30m", "60m", "90m"} and days > 60:
-        return "60d", "Intraday data (2m–90m) limited to ~60 days; period clamped to 60d."
-    return yf_period, None
-
-# -------------------- Data fetch --------------------
-@st.cache_data(show_spinner=False, ttl=120)
-def fetch_ohlcv(symbol: str, yf_period: str, interval: str) -> pd.DataFrame:
-    df = yf.download(symbol, period=yf_period, interval=interval, auto_adjust=False, progress=False)
-    if df is None or df.empty:
-        return pd.DataFrame()
-    # flatten columns if needed
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = [c[0] if isinstance(c, tuple) else str(c) for c in df.columns]
-    cols = {c.lower(): c for c in df.columns}
-    col_map = {}
-    for key in ["open", "high", "low", "close", "adj close", "volume"]:
-        if key in cols:
-            col_map[key] = cols[key]
-        else:
-            for c in df.columns:
-                if c.lower().startswith(key):
-                    col_map[key] = c
-                    break
-    out = pd.DataFrame(index=df.index.copy())
-    for pretty, raw in (("Open", "open"), ("High", "high"), ("Low", "low"), ("Close", "close")):
-        if raw in col_map:
-            out[pretty] = pd.to_numeric(df[col_map[raw]], errors="coerce")
-    if "volume" in col_map:
-        out["Volume"] = pd.to_numeric(df[col_map["volume"]], errors="coerce")
-    out = out.dropna(subset=[c for c in ["Open", "High", "Low", "Close"] if c in out.columns])
-    # UTC tz-aware index
-    if getattr(out.index, "tz", None) is None:
-        out.index = out.index.tz_localize("UTC")
-    else:
-        out.index = out.index.tz_convert("UTC")
-    return out
-
-def to_local_ts(ts: pd.Timestamp, local_tz: str = LOCAL_TZ) -> pd.Timestamp:
-    if ts.tzinfo is None:
-        ts = ts.tz_localize("UTC")
-    return ts.tz_convert(ZoneInfo(local_tz))
-
-# -------------------- Indicator math --------------------
-def get_source_series(df: pd.DataFrame, source: str) -> pd.Series:
-    s = (source or "close").lower()
-    if s == "close":
-        return df["Close"].astype(float)
-    if s == "open":
-        return df["Open"].astype(float)
-    if s == "hlc3":
-        return (df["High"] + df["Low"] + df["Close"]) / 3.0
-    if s == "ohlc4":
-        return (df["Open"] + df["High"] + df["Low"] + df["Close"]) / 4.0
-    return df["Close"].astype(float)
-
-def sma(series: pd.Series, period: int) -> pd.Series:
-    p = max(1, int(period))
-    return series.rolling(p, min_periods=1).mean()
-
-def ema(series: pd.Series, period: int) -> pd.Series:
-    p = max(1, int(period))
-    return series.ewm(span=p, adjust=False, min_periods=1).mean()
-
-def rsi(series: pd.Series, period: int = 14) -> pd.Series:
-    p = max(2, int(period))
-    d = series.diff()
-    up = d.clip(lower=0).ewm(alpha=1 / p, adjust=False).mean()
-    dn = (-d.clip(upper=0)).ewm(alpha=1 / p, adjust=False).mean()
-    rs = up / dn.replace(0, np.nan)
-    out = 100 - (100 / (1 + rs))
-    return out.fillna(50.0)
-
-def macd(series: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9):
-    fast = max(1, int(fast))
-    slow = max(fast + 1, int(slow))  # ensure slow > fast
-    signal = max(1, int(signal))
-    line = ema(series, fast) - ema(series, slow)
-    sig = ema(line, signal)
-    hist = line - sig
-    return line, sig, hist
-
-def bollinger(series: pd.Series, period: int = 20, stddev: float = 2.0):
-    p = max(1, int(period))
-    m = sma(series, p)
-    sd = series.rolling(p, min_periods=1).std(ddof=0)
-    u = m + float(stddev) * sd
-    l = m - float(stddev) * sd
-    return m, u, l
-
-def vwap(df: pd.DataFrame) -> pd.Series:
-    if "Volume" not in df or df["Volume"].isna().all() or (df["Volume"] == 0).all():
-        return pd.Series([np.nan] * len(df), index=df.index)
-    tp = (df["High"] + df["Low"] + df["Close"]) / 3.0
-    vol = df["Volume"].astype(float)
-    by_day = pd.Index(df.index.tz_convert("UTC").date, name="day")
-    cum_pv = pd.Series(tp.values * vol.values, index=df.index).groupby(by_day).cumsum()
-    cum_v = vol.groupby(by_day).cumsum()
-    return (cum_pv / cum_v).astype(float)
-
-# -------------------- Fetch + prepare data --------------------
-clamped_period, clamp_msg = clamp_period_for_interval(period_label, interval)
-if clamp_msg:
-    st.info(clamp_msg)
-
-df = fetch_ohlcv(ticker, clamped_period, interval)
-if df.empty or {"Open", "High", "Low", "Close"}.difference(df.columns):
-    st.warning("No data returned for this symbol/period/interval combination. Try another selection.")
-    st.stop()
-
-last_ts_local = to_local_ts(df.index[-1], LOCAL_TZ)
-last_close = df["Close"].iloc[-1]
-st.markdown(
-    (
-        f"### {ticker}  "
-        f"<span style='opacity:0.8'>Last:</span> <strong>{last_close:,.4f}</strong>  "
-        f"<span style='opacity:0.6'>@ {last_ts_local.strftime('%Y-%m-%d %H:%M:%S %Z')} (local)</span>"
-    ),
-    unsafe_allow_html=True,
-)
-
-# payload for the component (time in seconds)
-ohlcv_payload = [
-    dict(
-        time=int(ts.timestamp()),
-        open=float(o),
-        high=float(h),
-        low=float(l),
-        close=float(c),
-        volume=float(v) if ("Volume" in df and show_volume) else None,
-    )
-    for ts, o, h, l, c, v in zip(
-        df.index, df["Open"], df["High"], df["Low"], df["Close"], (df["Volume"] if "Volume" in df else [0] * len(df)),
-    )
-]
-
-# -------------------- Build indicator payloads --------------------
-visible_inds = [i for i in ind_list if i.get("visible", True)]
-
-def _line_series_from_pd(idx: pd.DatetimeIndex, series: pd.Series):
-    rows = []
-    for ts, v in series.dropna().items():
-        try:
-            rows.append({"time": int(ts.timestamp()), "value": float(v)})
-        except Exception:
-            continue
-    return rows
-
-overlay_indicators = []
-for ind in visible_inds:
-    if ind["type"] in {"SMA", "EMA", "BB", "VWAP"} and ind.get("pane", "overlay") == "overlay":
-        color = ind.get("color", "#33cccc")
-        dash = DASH_MAP.get(ind.get("style", "Solid"), "solid")
-        if ind["type"] == "SMA":
-            p = int(ind["params"].get("period", 20))
-            src = ind["params"].get("source", "close")
-            y = sma(get_source_series(df, src), p)
-            overlay_indicators.append({"id": f"SMA_{p}","name": f"SMA({p})","color": color,"width": 1.6,"dash": dash,
-                                       "data": _line_series_from_pd(df.index, y)})
-        elif ind["type"] == "EMA":
-            p = int(ind["params"].get("period", 50))
-            src = ind["params"].get("source", "close")
-            y = ema(get_source_series(df, src), p)
-            overlay_indicators.append({"id": f"EMA_{p}","name": f"EMA({p})","color": color,"width": 1.6,"dash": dash,
-                                       "data": _line_series_from_pd(df.index, y)})
-        elif ind["type"] == "BB":
-            p = int(ind["params"].get("period", 20))
-            sd = float(ind["params"].get("stddev", 2.0))
-            src = ind["params"].get("source", "close")
-            m, u, l = bollinger(get_source_series(df, src), p, sd)
-            overlay_indicators += [
-                {"id": f"BB_LO_{p}","name": "BB Lower","color": color,"width": 1.0,"dash": "dash",
-                 "data": _line_series_from_pd(df.index, l)},
-                {"id": f"BB_UP_{p}","name": "BB Upper","color": color,"width": 1.0,"dash": "dash",
-                 "data": _line_series_from_pd(df.index, u)},
-                {"id": f"BB_MID_{p}","name": "BB Mid","color": color,"width": 1.0,"dash": "dot",
-                 "data": _line_series_from_pd(df.index, m)},
-            ]
-        elif ind["type"] == "VWAP":
-            y = vwap(df)
-            overlay_indicators.append({"id": "VWAP","name": "VWAP","color": color,"width": 2.0,"dash": dash,
-                                       "data": _line_series_from_pd(df.index, y)})
-
-pane_indicators = []
-
-# RSI (can be multiple)
-rsi_inds = [i for i in visible_inds if i["type"] == "RSI"]
-if rsi_inds:
-    lines = []
-    for ind in rsi_inds:
-        p = int(ind["params"].get("period", 14))
-        y = rsi(get_source_series(df, "Close"), p)
-        lines.append({"id": f"RSI_{p}","name": f"RSI({p})","color": ind.get("color", "#7f7f7f"),
-                      "width": 1.6,"dash": "solid","data": _line_series_from_pd(df.index, y)})
-    pane_indicators.append({
-        "id": "RSI","height": 140,"yRange": {"min": 0, "max": 100},
-        "lines": lines,"hlines": [{"y": 70, "color": "#888", "dash": "dot"}, {"y": 30, "color": "#888", "dash": "dot"}],
-    })
-
-# MACD (one pane per MACD config)
-for ind in [i for i in visible_inds if i["type"] == "MACD"]:
-    f = int(ind["params"].get("fast", 12))
-    s = int(ind["params"].get("slow", 26))
-    sig = int(ind["params"].get("signal", 9))
-    line, signal_line, hist = macd(get_source_series(df, "Close"), f, s, sig)
-    pane_indicators.append({
-        "id": f"MACD_{f}_{s}_{sig}",
-        "height": 160,
-        "lines": [
-            {"id": f"MACD_L_{f}_{s}_{sig}","name": f"MACD({f},{s})","color": ind.get("color", "#1f77b4"),
-             "width": 1.6,"dash": "solid","data": _line_series_from_pd(df.index, line)},
-            {"id": f"MACD_S_{f}_{s}_{sig}","name": "Signal","color": "#aaaaaa",
-             "width": 1.2,"dash": "dot","data": _line_series_from_pd(df.index, signal_line)},
-        ],
-        "hist": [{"id": f"MACD_H_{f}_{s}_{sig}","name": "Hist","color": "#60a5fa",
-                  "data": _line_series_from_pd(df.index, hist)}],
-    })
-
-# -------------------- Pattern detection + markers --------------------
-pattern_markers: list = []
-profile_key = _profile_key(ticker, interval)
-
-hits = []
-# Build pattern markers for main chart
-df_slice = df.iloc[-min(len(df), 400):].copy()
-hits = []
-if pst.get("enabled") and pst["enabled_names"]:
-    hits = detect_all(df_slice, pst["enabled_names"], pst["cfg"])
-    off = len(df) - len(df_slice)
-    for h in hits: h.index += off; h.bars = [b + off for b in h.bars]
-pattern_markers = hits_to_markers(hits, df)
-
-offset = len(df) - len(df_slice)
-for h in hits:
-    # align found indices back to full df
-    h.index += offset
-    h.bars = [b + offset for b in h.bars]
-
-enabled_set = set(st.session_state["patterns_state"][profile_key]["enabled_names"]) \
-    if "patterns_state" in st.session_state and profile_key in st.session_state["patterns_state"] else set()
-hits = [h for h in hits if h.name in enabled_set]
-
-# Optional: log pattern alerts into session (UI expander below shows them)
-if "signals_log" not in st.session_state:
-    st.session_state["signals_log"] = []
-if "patterns_state" in st.session_state and profile_key in st.session_state["patterns_state"]:
-    pst = st.session_state["patterns_state"][profile_key]
-    last_idx = pst.setdefault("last_alert_idx", {})
-    for h in hits:
-        if h.confidence < pst["min_conf"]:
-            continue
-        li = last_idx.get(h.name, -10**9)
-        if h.index - li >= pst["cfg"]["min_bars_between_alerts"]:
-            last_idx[h.name] = h.index
-            st.session_state["signals_log"].append({
-                "time": df.index[h.index].isoformat(),
-                "symbol": ticker,
-                "tf": interval,
-                "pattern": h.name,
-                "dir": h.direction,
-                "conf": round(h.confidence, 3),
-                "price": float(df["Close"].iat[h.index]),
-            })
-
-pattern_markers = hits_to_markers(hits, df) if hits else []
-
-# -------------------- Strategy alerts → markers --------------------
-def _snap_to_candle_time(ts_utc: pd.Timestamp, idx: pd.DatetimeIndex) -> int:
-    """Return nearest candle timestamp (seconds) for a UTC timestamp."""
-    if ts_utc.tzinfo is None:
-        ts_utc = ts_utc.tz_localize("UTC")
-    pos = idx.get_indexer([ts_utc], method="nearest")[0]
-    return int(idx[max(0, min(pos, len(idx) - 1))].timestamp())
-
-strategy_markers: list = []
-df_alerts = fetch_alerts()
-if not df_alerts.empty:
-    # Expect columns: id, ts_utc, symbol, timeframe, strategy, side, price, confidence, msg, ...
-    f = df_alerts[(df_alerts["symbol"] == ticker) & (df_alerts["timeframe"] == interval)].tail(400)
-    for _, r in f.iterrows():
-        try:
-            ts = pd.to_datetime(r["ts_utc"], utc=True)
-        except Exception:
-            continue
-        side = str(r.get("side", "")).lower()
-        is_long = side in ("long", "buy", "bull", "bullish")
-        shape = "arrowUp" if is_long else "arrowDown"
-        position = "belowBar" if is_long else "aboveBar"
-        color = "#10b981" if is_long else "#ef4444"  # green / red
-        tsec = _snap_to_candle_time(ts, df.index)
-        label = str(r.get("strategy", "Signal"))
-        strategy_markers.append({
-            "time": tsec,
-            "position": position,
-            "color": color,
-            "shape": shape,
-            "text": label,
-        })
-
-# Combine all markers
-all_markers = (pattern_markers or []) + (strategy_markers or [])
-
-# -------------------- Drawings persistence + component render --------------------
-if "drawings" not in st.session_state:
-    st.session_state["drawings"] = {}
-initial_drawings = st.session_state["drawings"].get(prof_key, {})
+def _safe_symbol_list() -> List[str]:
+    return _coerce_symbols(SETTINGS.get("watchlist", []))
 
 
-draw_state = st_trading_draw(
-    ohlcv=ohlcv_payload,
-    symbol=ticker,
-    timeframe=interval,
-    initial_drawings=initial_drawings,
-    magnet=True,
-    toolbar_default="docked-right",
-    overlay_indicators=overlay_indicators,
-    pane_indicators=pane_indicators,
-    markers=all_markers,  # <- patterns + strategy signals
-    key=f"draw_{profile_key}",
-)
-if isinstance(draw_state, dict) and "drawings" in draw_state:
-    st.session_state["drawings"][profile_key] = draw_state["drawings"]
+def _ensure_layout() -> List[Dict[str, Any]]:
+    dash = SETTINGS.setdefault("dashboard", {})
+    layout = dash.setdefault("layout", [])
+    if not layout or len(layout) != 4:
+        SETTINGS["dashboard"]["layout"] = json.loads(json.dumps(DEFAULTS["dashboard"]["layout"]))
+        layout = SETTINGS["dashboard"]["layout"]
+    # Fill missing keys defensively
+    wl_safe = _safe_symbol_list()
+    fallback_sym = wl_safe[0] if wl_safe else "AAPL"
+    for tile in layout:
+        tile.setdefault("type", "Chart")
+        tile.setdefault("symbol", fallback_sym)
+        tile.setdefault("timeframe", "1D")
+        if tile["type"] == "Chart":
+            tile.setdefault("studies", {"ema": [20, 50, 200], "bbands": {"length": 20, "stdev": 2.0}, "vwap": True})
+            tile.setdefault("compare", [])
+        if tile["type"] == "Backtest":
+            tile.setdefault("strategies", SETTINGS.get("strategies", {}).get("enabled", []))
+        if tile["type"] == "Scanner":
+            tile.setdefault("filters", {"min_conf": 0.65, "min_rr": 1.8})
+            tile.setdefault("scope", "watchlist")  # "watchlist" or "symbol"
+        if tile["type"] == "Journal":
+            tile.setdefault("max_rows", 50)
+    return layout
 
-# -------------------- Export / Import drawings --------------------
-with st.expander("Drawings: Export / Import", expanded=False):
-    colx, coly = st.columns(2)
-    with colx:
-        st.download_button(
-            "Export drawings (JSON)",
-            data=json.dumps(st.session_state["drawings"].get(profile_key, {}), indent=2),
-            file_name=f"drawings_{profile_key}.json",
-            mime="application/json",
-            use_container_width=True,
-        )
-    with coly:
-        up = st.file_uploader("Import drawings (JSON)", type=["json"])
-        if up:
-            try:
-                payload = json.loads(up.read().decode("utf-8"))
-                st.session_state["drawings"][prof_key] = payload
-                st.success("Imported drawings")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Import failed: {e}")
 
-# -------------------- Pattern Signals Log --------------------
-with st.expander("Pattern Signals Log", expanded=False):
-    if st.session_state.get("signals_log"):
-        df_log = pd.DataFrame(st.session_state["signals_log"])[-200:]
-        st.dataframe(df_log, use_container_width=True, height=240)
-    else:
-        st.caption("No signals yet.")
-
-# ==================== LIVE — NEW ALERTS (non-blocking board) ====================
-with st.expander("🔔 Live — New Alerts (new only)", expanded=True):
-    # drain queue without blocking
-    pending = []
+def _markers_from_alerts(symbol: str, tf: str, df: pd.DataFrame) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
     try:
-        while True:
-            pending.append(eng.q.get_nowait())
+        a = fetch_alerts()
+        if isinstance(a, pd.DataFrame) and not a.empty:
+            f = a[(a["symbol"].astype(str).str.upper() == symbol.upper()) & (a["timeframe"] == tf)].tail(400)
+            for _, r in f.iterrows():
+                ts = pd.to_datetime(r.get("ts_utc") or r.get("time") or r.get("ts"), utc=True, errors="coerce")
+                if pd.isna(ts):
+                    continue
+                pos = df.index.get_indexer([ts], method="nearest")
+                if len(pos) == 0:
+                    continue
+                i = max(0, min(int(pos[0]), len(df) - 1))
+                is_long = str(r.get("side", "")).lower() in ("long", "buy", "bull", "bullish")
+                out.append(
+                    {
+                        "time": int(df.index[i].timestamp()),
+                        "position": "belowBar" if is_long else "aboveBar",
+                        "shape": "arrowUp" if is_long else "arrowDown",
+                        "color": "#10b981" if is_long else "#ef4444",
+                        "text": str(r.get("strategy", "Signal")),
+                    }
+                )
     except Exception:
         pass
+    return out
 
+
+# ---------------------- Sidebar: Global & Per-tile Editors ----------------------
+st.sidebar.markdown("### Dashboard Controls")
+
+# Watchlist / Timeframes
+options_watch = sorted(set(_coerce_symbols(DEFAULTS["watchlist"]) + _safe_symbol_list()))
+wl = st.sidebar.multiselect(
+    "Watchlist",
+    options=options_watch,
+    default=_safe_symbol_list() or _coerce_symbols(DEFAULTS["watchlist"]),
+)
+
+tfs = st.sidebar.multiselect(
+    "Timeframes",
+    TIMEFRAMES,
+    default=[x for x in SETTINGS.get("timeframes", TIMEFRAMES) if x in TIMEFRAMES],
+)
+
+persist = st.sidebar.checkbox(
+    "Persist layout to settings.json",
+    value=bool(SETTINGS.get("dashboard", {}).get("persist", True)),
+)
+
+# Risk/Costs
+st.sidebar.markdown("**Risk & Costs**")
+risk_pct = st.sidebar.number_input(
+    "Risk % (display only)", min_value=0.1, max_value=10.0,
+    value=float(SETTINGS.get("risk", {}).get("risk_pct", 1.0)), step=0.1,
+)
+comm_bps = st.sidebar.number_input(
+    "Commission (bps)", min_value=0.0, max_value=50.0,
+    value=float(SETTINGS.get("risk", {}).get("commission_bps", 1.0)), step=0.5,
+)
+slip_bps = st.sidebar.number_input(
+    "Slippage (bps)", min_value=0.0, max_value=100.0,
+    value=float(SETTINGS.get("risk", {}).get("slippage_bps", 2.0)), step=0.5,
+)
+
+# Persist sidebar values back to SETTINGS (strings only)
+SETTINGS["watchlist"] = _coerce_symbols(wl)
+SETTINGS["timeframes"] = [tf for tf in tfs if tf in TIMEFRAMES]
+SETTINGS.setdefault("risk", {})
+SETTINGS["risk"].update({
+    "risk_pct": float(risk_pct),
+    "commission_bps": float(comm_bps),
+    "slippage_bps": float(slip_bps),
+})
+SETTINGS.setdefault("dashboard", {})
+SETTINGS["dashboard"]["persist"] = bool(persist)
+
+# Per-tile editors
+st.sidebar.markdown("---")
+st.sidebar.markdown("### Tile Editors")
+
+layout = _ensure_layout()
+
+
+def _tile_editor(i: int, tile: Dict[str, Any]) -> Dict[str, Any]:
+    st.sidebar.markdown(f"**Tile {i+1}**")
+    ttype = st.sidebar.selectbox(
+        f"Type #{i+1}", TILE_TYPES, index=TILE_TYPES.index(tile.get("type", "Chart")), key=f"tile_type_{i}"
+    )
+    sym = st.sidebar.text_input(f"Symbol #{i+1}", value=str(tile.get("symbol", "AAPL")), key=f"tile_sym_{i}")
+    tf = st.sidebar.selectbox(
+        f"Timeframe #{i+1}", TIMEFRAMES, index=max(0, TIMEFRAMES.index(tile.get("timeframe", "1D"))), key=f"tile_tf_{i}"
+    )
+
+    new_tile = {"type": ttype, "symbol": sym.strip().upper(), "timeframe": tf}
+
+    if ttype == "Chart":
+        studies = tile.get("studies", {"ema": [20, 50, 200], "bbands": {"length": 20, "stdev": 2.0}, "vwap": True})
+        ema_csv = st.sidebar.text_input(
+            f"EMAs #{i+1} (csv)", value=",".join(map(str, studies.get("ema", [20, 50, 200]))), key=f"tile_ema_{i}"
+        )
+        bb_len = st.sidebar.number_input(
+            f"BB length #{i+1}", 5, 200, int(studies.get("bbands", {}).get("length", 20)), key=f"tile_bb_len_{i}"
+        )
+        bb_sd = st.sidebar.number_input(
+            f"BB stdev #{i+1}", 0.5, 6.0, float(studies.get("bbands", {}).get("stdev", 2.0)), step=0.1, key=f"tile_bb_sd_{i}"
+        )
+        vwap_on = st.sidebar.checkbox(f"VWAP #{i+1}", value=bool(studies.get("vwap", True)), key=f"tile_vwap_{i}")
+        compare_csv = st.sidebar.text_input(
+            f"Compare (0–3, csv) #{i+1}", value=",".join(tile.get("compare", []))[:200], key=f"tile_cmp_{i}"
+        )
+        new_tile.update(
+            {
+                "studies": {
+                    "ema": [int(x) for x in ema_csv.split(",") if x.strip().isdigit()][:6],
+                    "bbands": {"length": int(bb_len), "stdev": float(bb_sd)},
+                    "vwap": bool(vwap_on),
+                },
+                "compare": [x.strip().upper() for x in compare_csv.split(",") if x.strip()][:3],
+            }
+        )
+
+    elif ttype == "Backtest":
+        if get_strategy_catalog:
+            try:
+                cat = get_strategy_catalog()
+                strat_names = sorted({v["name"] for v in cat.values()})
+            except Exception:
+                strat_names = DEFAULTS["strategies"]["enabled"]
+        else:
+            strat_names = DEFAULTS["strategies"]["enabled"]
+        default_sel = tile.get("strategies", strat_names)
+        sel = st.sidebar.multiselect(
+            f"Strategies #{i+1}", options=strat_names, default=[x for x in default_sel if x in strat_names], key=f"tile_bt_strats_{i}"
+        )
+        new_tile["strategies"] = sel
+
+    elif ttype == "Scanner":
+        scope = st.sidebar.selectbox(
+            f"Scope #{i+1}", ["watchlist", "symbol"], index=0 if tile.get("scope", "watchlist") == "watchlist" else 1, key=f"tile_sc_scope_{i}"
+        )
+        minc = st.sidebar.slider(
+            f"Min Confidence #{i+1}", 0.0, 1.0, float(tile.get("filters", {}).get("min_conf", 0.65)), 0.05, key=f"tile_sc_minc_{i}"
+        )
+        minrr = st.sidebar.number_input(
+            f"Min RR #{i+1}", 0.5, 5.0, float(tile.get("filters", {}).get("min_rr", 1.8)), step=0.1, key=f"tile_sc_minrr_{i}"
+        )
+        new_tile.update({"scope": scope, "filters": {"min_conf": float(minc), "min_rr": float(minrr)}})
+
+    elif ttype == "Journal":
+        mr = st.sidebar.number_input(f"Max rows #{i+1}", 10, 500, int(tile.get("max_rows", 50)), key=f"tile_journal_rows_{i}")
+        new_tile.update({"max_rows": int(mr)})
+
+    return new_tile
+
+
+new_layout = []
+for i, tile in enumerate(layout):
+    new_layout.append(_tile_editor(i, tile))
+
+if st.sidebar.button("Apply & Refresh", use_container_width=True):
+    SETTINGS["dashboard"]["layout"] = new_layout
+    SETTINGS["dashboard"]["persist"] = persist
+    save_settings(SETTINGS) if persist else None
+    st.rerun()
+
+# ---------------------- Tile Renderers ----------------------
+def _candles_altair(df: pd.DataFrame, title: str = ""):
+    import altair as alt
+
+    data = df.reset_index().rename(columns={"index": "ts"})
+    data["ts"] = pd.to_datetime(data["Datetime"] if "Datetime" in data.columns else data["ts"])
+    base = alt.Chart(data).properties(height=300, title=title)
+    rule = base.mark_rule().encode(x="ts:T", y="Low:Q", y2="High:Q")
+    bars = base.mark_bar().encode(
+        x="ts:T",
+        y="Open:Q",
+        y2="Close:Q",
+        color=alt.condition("datum.Open <= datum.Close", alt.value("#10b981"), alt.value("#ef4444")),
+    )
+    return rule + bars
+
+
+def _chart_tile(tile: Dict[str, Any]):
+    sym = tile["symbol"]
+    tf = tile["timeframe"]
+    df = fetch_ohlcv(sym, tf)
+    if df.empty:
+        st.warning(f"No data for {sym} {tf}.")
+        return
+
+    # --- Patterns (per symbol@tf) ---
+    pkey = f"{sym}@{tf}"
+    pst = st.session_state["patterns_state"].setdefault(
+        pkey,
+        {
+            "enabled": True,
+            "min_conf": PAT_DEFAULTS["min_confidence"],
+            "enabled_names": [],
+            "cfg": PAT_DEFAULTS.copy(),
+            "last_alert_idx": {},
+        },
+    )
+    with st.expander(f"Patterns — {sym} {tf}", expanded=False):
+        colsP = st.columns(2)
+        pst["enabled"] = colsP[0].toggle("Enable", value=bool(pst["enabled"]), key=f"pat_on_{pkey}")
+        pst["min_conf"] = float(
+            colsP[1].slider("Min confidence", 0.0, 1.0, float(pst["min_conf"]), 0.05, key=f"pat_min_{pkey}")
+        )
+        all_names = [
+            "Hammer","Inverted Hammer","Bullish Engulfing","Bearish Engulfing","Doji",
+            "Morning Star","Evening Star","Bullish Harami","Bearish Harami","Tweezer Top","Tweezer Bottom",
+            "Head & Shoulders","Inverse Head & Shoulders","Piercing Line","Dark Cloud Cover",
+            "Three White Soldiers","Three Black Crows","Three Inside Up","Three Inside Down",
+            "Three Outside Up","Three Outside Down","Marubozu","Rising Window","Falling Window",
+            "Tasuki Up","Tasuki Down","Kicker Bull","Kicker Bear","Rising Three Methods","Falling Three Methods","Mat Hold",
+        ]
+        sel: List[str] = []
+        colsN = st.columns(3)
+        for i, nm in enumerate(all_names):
+            if colsN[i % 3].checkbox(nm, value=(nm in pst["enabled_names"]), key=f"pat_{pkey}_{nm}"):
+                sel.append(nm)
+        pst["enabled_names"] = sel
+        if st.button("Restore default thresholds", key=f"pat_rst_{pkey}"):
+            pst["cfg"] = PAT_DEFAULTS.copy()
+            st.success("Restored.")
+
+    # Build overlays (EMAs/BB/VWAP)
+    studies = tile.get("studies", {})
+    ema_list = studies.get("ema", [])
+    bb_cfg = studies.get("bbands", {"length": 20, "stdev": 2.0})
+    vwap_on = bool(studies.get("vwap", True))
+
+    # --- Pattern markers (recent window) ---
+    pat_markers: List[Dict[str, Any]] = []
+    if pst.get("enabled") and pst["enabled_names"]:
+        df_slice = df.iloc[-min(len(df), 400) :].copy()
+        try:
+            hits = detect_all(df_slice, pst["enabled_names"], pst["cfg"])
+            hits = [h for h in hits if h.confidence >= pst["min_conf"]]
+            # align to full df
+            off = len(df) - len(df_slice)
+            for h in hits:
+                h.index += off
+                h.bars = [b + off for b in h.bars]
+            pat_markers = hits_to_markers(hits, df)
+        except Exception:
+            pat_markers = []
+
+    # --- Strategy markers from storage ---
+    strat_markers = _markers_from_alerts(sym, tf, df)
+    all_markers = pat_markers + strat_markers
+
+    # --- Drawing persistence ---
+    initial_drawings = st.session_state["drawings"].get(pkey, {})
+
+    if tv_chart:
+        ohlcv = [
+            dict(
+                time=int(ts.timestamp()),
+                open=float(o),
+                high=float(h),
+                low=float(l),
+                close=float(c),
+                volume=float(v) if "Volume" in df else None,
+            )
+            for ts, o, h, l, c, v in zip(
+                df.index, df["Open"], df["High"], df["Low"], df["Close"], (df["Volume"] if "Volume" in df else [0] * len(df))
+            )
+        ]
+        overlays = []
+        for n in ema_list[:6]:
+            overlays.append({"type": "ema", "params": {"length": int(n)}})
+        if bb_cfg:
+            overlays.append(
+                {"type": "bbands", "params": {"length": int(bb_cfg.get("length", 20)), "stdev": float(bb_cfg.get("stdev", 2.0))}}
+            )
+        if vwap_on:
+            overlays.append({"type": "vwap", "params": {}})
+
+        panes = [{"type": "rsi", "params": {"length": 14}}, {"type": "macd", "params": {"fast": 12, "slow": 26, "signal": 9}}]
+
+        state = tv_chart(
+            ohlcv=ohlcv,
+            symbol=sym,
+            timeframe=tf,
+            initial_drawings=initial_drawings,
+            magnet=True,
+            toolbar_default="docked-right",
+            overlay_indicators=overlays,
+            pane_indicators=panes,
+            markers=all_markers,
+            key=f"chart_{sym}_{tf}",
+        )
+        if isinstance(state, dict) and "drawings" in state:
+            st.session_state["drawings"][pkey] = state["drawings"]
+
+        with st.expander("Drawings: Export / Import", expanded=False):
+            c1, c2 = st.columns(2)
+            with c1:
+                st.download_button(
+                    "Export drawings (JSON)",
+                    data=json.dumps(st.session_state["drawings"].get(pkey, {}), indent=2),
+                    file_name=f"drawings_{pkey}.json",
+                    mime="application/json",
+                    use_container_width=True,
+                )
+            with c2:
+                up = st.file_uploader("Import drawings (JSON)", type=["json"], key=f"import_{pkey}")
+                if up:
+                    try:
+                        payload = json.loads(up.read().decode("utf-8"))
+                        st.session_state["drawings"][pkey] = payload
+                        st.success("Imported.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Import failed: {e}")
+    else:
+        # Altair fallback (no markers/drawings)
+        ch = _candles_altair(df, title=f"{sym} — {tf}")
+        for n in ema_list[:4]:
+            df[f"EMA{n}"] = ema(df["Close"], int(n))
+        import altair as alt
+
+        chart = ch
+        for n in ema_list[:4]:
+            line = (
+                alt.Chart(df.reset_index())
+                .mark_line()
+                .encode(x="index:T", y=alt.Y(f"EMA{n}:Q", axis=alt.Axis(title=None)))
+            )
+            chart = chart + line
+        st.altair_chart(chart, use_container_width=True)
+
+
+def _dedupe_alerts(rows: List[Dict[str, Any]]) -> pd.DataFrame:
+    if not rows:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    for col in ["symbol", "tf", "strategy", "side"]:
+        if col not in df.columns:
+            df[col] = ""
+    df["key"] = (
+        df["symbol"].astype(str)
+        + "|"
+        + df["tf"].astype(str)
+        + "|"
+        + df["strategy"].astype(str)
+        + "|"
+        + df["side"].astype(str)
+    )
+    df = df.sort_values(by=["confidence", "msg"], ascending=[False, True]).drop_duplicates(subset=["key"], keep="first")
+    df = df.sort_values(by=["confidence", "price"], ascending=[False, True])
+    return df
+
+
+def _scanner_tile(tile: Dict[str, Any]):
+    # Fetch alerts, normalize to list-of-dicts
+    rows: List[Dict[str, Any]] = []
+    try:
+        dfA = fetch_alerts(limit=500)
+        if isinstance(dfA, pd.DataFrame):
+            rows = dfA.to_dict("records")
+        elif isinstance(dfA, list):
+            rows = dfA
+        else:
+            rows = []
+    except Exception:
+        rows = []
+    df = _dedupe_alerts(rows)
+    if df.empty:
+        st.info("No live signals yet.")
+        return
+
+    # Apply scope / filters
+    scope = tile.get("scope", "watchlist")
+    filters = tile.get("filters", {"min_conf": 0.65, "min_rr": 1.8})
+    minc = float(filters.get("min_conf", 0.65))
+    minrr = float(filters.get("min_rr", 1.8))
+
+    wl_upper = set(_safe_symbol_list())
+    if scope == "symbol":
+        df = df[df["symbol"].astype(str).str.upper() == tile["symbol"].upper()]
+    else:
+        df = df[df["symbol"].astype(str).str.upper().isin(wl_upper)]
+    if "confidence" in df.columns:
+        df = df[df["confidence"].fillna(0.0) >= minc]
+    if "rr" in df.columns:
+        df = df[(df["rr"].fillna(0.0)) >= minrr]
+
+    keep_cols = [c for c in ["symbol", "tf", "strategy", "side", "price", "confidence", "rr", "msg", "time"] if c in df.columns]
+    if keep_cols:
+        st.dataframe(df[keep_cols], use_container_width=True, height=320)
+        csv = df[keep_cols].to_csv(index=False)
+        st.download_button("Export scanner CSV", data=csv, file_name="scanner_signals.csv")
+    else:
+        st.dataframe(df, use_container_width=True, height=320)
+
+
+def _backtest_builtin(
+    df: pd.DataFrame,
+    tf: str,
+    strategies: List[str],
+    commission_bps: float = 1.0,
+    slippage_bps: float = 2.0,
+) -> Tuple[pd.DataFrame, Dict[str, float]]:  # equity DF, KPIs
+    if df.empty or len(df) < 50:
+        return pd.DataFrame(), {}
+
+    close = df["Close"].copy()
+    ret = close.pct_change().fillna(0.0)
+
+    # Simple signal blend: union of three common patterns if names match
+    sig = pd.Series(0, index=df.index, dtype=float)
+
+    if any("golden" in s.lower() or "ema50/200" in s.lower() or "crossover" in s.lower() for s in strategies):
+        e50 = ema(close, 50)
+        e200 = ema(close, 200)
+        cross_up = (e50 > e200) & (e50.shift(1) <= e200.shift(1))
+        cross_dn = (e50 < e200) & (e50.shift(1) >= e200.shift(1))
+        pos = pd.Series(0, index=df.index, dtype=int)
+        pos = np.where(cross_up, 1, np.where(cross_dn, 0, np.nan))
+        pos = pd.Series(pos, index=df.index).ffill().fillna(0)
+        sig = np.maximum(sig, pos)
+
+    if any("rsi mean" in s.lower() for s in strategies):
+        rs = rsi(close, 14)
+        mr_pos = ((rs < 30) & (close > ema(close, 200))).astype(int)
+        sig = np.maximum(sig, mr_pos.rolling(2).max().fillna(0))
+
+    if any("breakout 20" in s.lower() or "20-high" in s.lower() for s in strategies):
+        high20 = df["High"].rolling(20).max()
+        bo = (close > high20.shift(1)).astype(int)
+        sig = np.maximum(sig, bo)
+
+    sig = pd.Series(sig, index=df.index).astype(float).fillna(0.0)
+    # Transaction costs (bps applied on change in position)
+    pos = sig.round().clip(0, 1)
+    pos_change = pos.diff().abs().fillna(0.0)
+    gross = pos.shift(1).fillna(0) * ret
+    tcost = pos_change * ((commission_bps + slippage_bps) / 10000.0)
+    strat_ret = gross - tcost
+
+    eq = (1.0 + strat_ret).cumprod()
+    trades = int(pos_change.sum())
+    exp = pos.mean()
+    dd = (eq / eq.cummax() - 1.0).min()
+    ann = 252 if tf in ("1D",) else (78 * 252 if tf == "5m" else 252)
+    cagr = eq.iloc[-1] ** (ann / max(1, len(eq))) - 1.0
+    sharpe = np.sqrt(ann) * (strat_ret.mean() / (strat_ret.std() + 1e-9))
+    neg = strat_ret[strat_ret < 0]
+    sortino = np.sqrt(ann) * (strat_ret.mean() / (neg.std() + 1e-9))
+    wins = (strat_ret > 0).sum()
+    winrate = wins / max(1, trades)
+    avg_trade = strat_ret[strat_ret != 0].mean() if trades else 0.0
+    turnover = pos_change.sum() / max(1, len(pos))
+    kpis = {
+        "CAGR": float(cagr),
+        "MaxDD": float(dd),
+        "Sharpe": float(sharpe),
+        "Sortino": float(sortino),
+        "WinRate": float(winrate),
+        "AvgTrade": float(avg_trade),
+        "Exposure": float(exp),
+        "Turnover": float(turnover),
+    }
+    out = pd.DataFrame({"equity": eq, "returns": strat_ret, "position": pos})
+    return out, kpis
+
+
+def _backtest_tile(tile: Dict[str, Any]):
+    sym = tile["symbol"]
+    tf = tile["timeframe"]
+    strats = tile.get("strategies", []) or DEFAULTS["strategies"]["enabled"]
+    df = fetch_ohlcv(sym, tf)
+    if df.empty:
+        st.warning(f"No data for {sym} {tf}.")
+        return
+    eq, kpi = _backtest_builtin(df, tf, strats, SETTINGS["risk"]["commission_bps"], SETTINGS["risk"]["slippage_bps"])
+    if eq.empty:
+        st.info("Not enough data to backtest.")
+        return
+    c1, c2 = st.columns([2, 1])
+    with c1:
+        st.line_chart(eq["equity"], height=260)
+    with c2:
+        show = {
+            k: (round(v * 100, 2) if k in ("CAGR", "MaxDD", "WinRate", "Exposure", "Turnover") else round(v, 3))
+            for k, v in kpi.items()
+        }
+        st.dataframe(pd.DataFrame([show]).T.rename(columns={0: "value"}), use_container_width=True, height=260)
+
+
+def _journal_tile(tile: Dict[str, Any]):
+    sym = tile["symbol"]
+    tf = tile["timeframe"]
+    key = f"{sym}|{tf}"
+
+    st.markdown(f"**Journal for {sym} — {tf}**")
+    note = st.text_area("Add note", value="", height=100, key=f"jrnl_text_{key}")
+    c1, c2, c3 = st.columns([1, 1, 1])
+    if c1.button("Save Note", key=f"jrnl_save_{key}"):
+        try:
+            # dict-shaped API
+            insert_journal(
+                {
+                    "id": f"note_{uuid4().hex[:10]}",
+                    "ts_utc": datetime.now(timezone.utc).isoformat(),
+                    "type": "note",
+                    "text": note,
+                    "tags": f"symbol:{sym},tf:{tf}",
+                    "link_id": "",
+                    "meta": {},
+                }
+            )
+        except TypeError:
+            # positional fallback
+            insert_journal(sym, tf, datetime.now(timezone.utc).isoformat(), note)
+        st.success("Saved.")
+
+    max_rows = int(tile.get("max_rows", 50))
+    # Fetch journal rows (supports both list-of-dicts and DataFrame)
+    try:
+        rj = fetch_journal(sym=sym, tf=tf, limit=max_rows)
+    except Exception:
+        rj = []
+    if isinstance(rj, pd.DataFrame):
+        df = rj
+    else:
+        df = pd.DataFrame(rj)
+    if not df.empty:
+        st.dataframe(df, use_container_width=True, height=240)
+        st.download_button("Export Journal CSV", df.to_csv(index=False), file_name=f"journal_{sym}_{tf}.csv")
+    else:
+        st.caption("No entries yet.")
+
+
+def _metrics_tile(tile: Dict[str, Any]):
+    sym = tile["symbol"]
+    tf = tile["timeframe"]
+    df = fetch_ohlcv(sym, tf)
+    if df.empty:
+        st.warning(f"No data for {sym} {tf}.")
+        return
+    vol_surge = (df["Volume"] / df["Volume"].rolling(20).mean()).iloc[-1] if "Volume" in df else np.nan
+    rsi14 = rsi(df["Close"], 14).iloc[-1]
+    _, _, macd_hist = macd(df["Close"], 12, 26, 9)
+    macd_h = macd_hist.iloc[-1]
+    stoch = stoch_k(df, 14, 3).iloc[-1]
+    a = atr(df, 14).iloc[-1]
+    _, _, _, bb_w = bbands(df["Close"], 20, 2.0)
+    bbw = bb_w.iloc[-1]
+    trend = ema_slope(df["Close"], 50).iloc[-1]
+    liq = (df["Close"] * (df["Volume"] if "Volume" in df else 0)).rolling(20).mean().iloc[-1]
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.metric("Volume Surge (x)", value=f"{vol_surge:.2f}")
+        st.metric("RSI(14)", value=f"{rsi14:.1f}")
+    with c2:
+        st.metric("MACD Hist", value=f"{macd_h:.4f}")
+        st.metric("Stoch %K", value=f"{stoch:.1f}")
+    with c3:
+        st.metric("ATR(14)", value=f"{a:.2f}")
+        st.metric("BB Width", value=f"{bbw:.3f}")
+
+    # Sparklines
+    s1 = (df["Volume"] / df["Volume"].rolling(20).mean()).tail(120).bfill() if "Volume" in df else pd.Series([np.nan])
+    s2 = rsi(df["Close"], 14).tail(120)
+    s3 = macd_hist.tail(120)
+    st.caption("Sparklines")
+    sc1, sc2, sc3 = st.columns(3)
+    with sc1:
+        st.line_chart(s1, height=120)
+    with sc2:
+        st.line_chart(s2, height=120)
+    with sc3:
+        st.line_chart(s3, height=120)
+
+
+# ---------------------- Layout: 2×2 grid ----------------------
+st.markdown("## Dashboard")
+layout = _ensure_layout()
+
+
+def _render_tile(idx: int, tile: Dict[str, Any]):
+    st.markdown(f"#### Tile {idx+1}: {tile['type']} — {tile['symbol']} ({tile['timeframe']})")
+    if tile["type"] == "Chart":
+        _chart_tile(tile)
+    elif tile["type"] == "Scanner":
+        _scanner_tile(tile)
+    elif tile["type"] == "Backtest":
+        _backtest_tile(tile)
+    elif tile["type"] == "Journal":
+        _journal_tile(tile)
+    elif tile["type"] == "Metrics":
+        _metrics_tile(tile)
+    else:
+        st.info("Unknown tile type.")
+
+
+row1_col1, row1_col2 = st.columns(2)
+with row1_col1:
+    _render_tile(0, layout[0])
+with row1_col2:
+    _render_tile(1, layout[1])
+
+row2_col1, row2_col2 = st.columns(2)
+with row2_col1:
+    _render_tile(2, layout[2])
+with row2_col2:
+    _render_tile(3, layout[3])
+
+# ---------------------- Persist on first load if requested ----------------------
+if SETTINGS.get("dashboard", {}).get("persist", True) and not st.session_state.get("persisted_once", False):
+    save_settings(SETTINGS)
+    st.session_state["persisted_once"] = True
+
+# ---------------------- Live Alerts Board ----------------------
+with st.expander("🔔 Live — New Alerts (new only)", expanded=True):
+    pending: List[Dict[str, Any]] = []
+    if eng:
+        try:
+            while True:
+                pending.append(eng.q.get_nowait())
+        except Exception:
+            pass
     new_hits = [h for h in pending if h["id"] not in st.session_state["seen_alert_ids"]]
     for h in new_hits:
         st.session_state["seen_alert_ids"].add(h["id"])
-        maybe_toast(h["msg"])
-        # also mirror to legacy log_rows so your CSV button still works
-        log_rows.append({
-            "time": h["time"], "symbol": h["symbol"], "tf": h["tf"], "side": h["side"],
-            "qty": h["meta"].get("qty", 0), "entry": h["price"], "sl": h["meta"].get("sl"),
-            "tp": "|".join(map(str, h["meta"].get("tp", []))), "strategy": h["strategy"],
-            "conf": h["confidence"], "reason": h["meta"].get("reason", ""),
-        })
-
+        maybe_toast(h.get("msg", "Signal"))
     if new_hits:
-        df_new = pd.DataFrame(new_hits)[["time","symbol","tf","strategy","side","price","confidence","msg","id"]]
-        st.dataframe(df_new, use_container_width=True, height=280, hide_index=True)
-    else:
-        st.caption("No new alerts.")
-
+        cols = ["time", "symbol", "tf", "strategy", "side", "price", "confidence", "msg", "id"]
+        st.dataframe(
+            pd.DataFrame(new_hits)[[c for c in cols if c in new_hits[0]]],
+            use_container_width=True,
+            height=260,
+            hide_index=True,
+        )
     c1, c2 = st.columns(2)
     if c1.button("Mark all as read", use_container_width=True):
         for h in pending:
             st.session_state["seen_alert_ids"].add(h["id"])
         st.success("Marked.")
-
     if c2.button("Export alerts CSV", use_container_width=True):
         path = export_csv("alerts", "data/alerts_export.csv")
         st.success(f"Saved → {path}")
-
-# Legacy CSV button still available
-if log_rows:
-    if st.button("💾 Export CSV (legacy logs)"):
-        csv_log("data/logs.csv", log_rows)
-        st.success("Logged to data/logs.csv")
-
-# ==================== HISTORY & JOURNAL ====================
-st.markdown("---")
-st.header("🗂️ History & Journal")
-tabs = st.tabs(["History","Data Collection","Setup & Strategy","Performance","Emotion Log","Trading Plan"])
-
-# History
-with tabs[0]:
-    st.subheader("Alert Archive")
-    dfA = fetch_alerts()
-    if dfA.empty:
-        st.caption("No alerts yet.")
-    else:
-        c1, c2, c3 = st.columns(3)
-        syms = sorted(dfA["symbol"].unique().tolist())
-        sy_f = c1.multiselect("Symbols", syms, default=syms[: min(5, len(syms))])
-        strats = sorted(dfA["strategy"].unique().tolist())
-        st_f = c2.multiselect("Strategies", strats, default=strats[: min(5, len(strats))])
-        fdf = dfA
-        if sy_f: fdf = fdf[fdf["symbol"].isin(sy_f)]
-        if st_f: fdf = fdf[fdf["strategy"].isin(st_f)]
-        st.dataframe(fdf, use_container_width=True, height=420, hide_index=True)
-        if c3.button("Export filtered CSV"):
-            path = "data/alerts_filtered.csv"
-            fdf.to_csv(path, index=False)
-            st.success(f"Saved → {path}")
-
-# Data Collection
-with tabs[1]:
-    st.subheader("Raw Signal Data (editable notes)")
-    dfA = fetch_alerts()
-    if dfA.empty:
-        st.caption("No data yet.")
-    else:
-        dfE = dfA[["id","ts_utc","symbol","timeframe","strategy","side","price","confidence","msg"]].copy()
-        dfE["note"] = ""
-        out = st.data_editor(dfE, use_container_width=True, height=420, key="data_collect")
-        if st.button("Save notes to Journal"):
-            now = datetime.now(timezone.utc).isoformat()
-            for _, row in out.iterrows():
-                note = (row.get("note") or "").strip()
-                if not note:
-                    continue
-                insert_journal({
-                    "id": f"note_{row['id']}",
-                    "ts_utc": now,
-                    "type": "note",
-                    "text": note,
-                    "tags": f"symbol:{row['symbol']},strategy:{row['strategy']}",
-                    "link_id": row["id"],
-                    "meta": {},
-                })
-            st.success("Saved notes.")
-        if st.button("Export CSV (Data Collection)"):
-            p = "data/data_collection.csv"; out.to_csv(p, index=False); st.success(f"Saved → {p}")
-
-# Setup & Strategy
-with tabs[2]:
-    st.subheader("Pre-Trade Checklist")
-    with st.form("setup_form"):
-        c1, c2, c3 = st.columns(3)
-        sym = c1.text_input("Symbol", value="AAPL")
-        strat = c2.text_input("Strategy", value="EMA Pullback")
-        plan_ok = c3.checkbox("Plan validated (rules met?)", value=True)
-        notes = st.text_area("Notes / Plan", height=120, value="Entry: ...\nRisk: ...\nInvalidation: ...")
-        submitted = st.form_submit_button("Save setup")
-    if submitted:
-        insert_journal({
-            "id": f"setup_{uuid4().hex[:10]}",
-            "ts_utc": datetime.now(timezone.utc).isoformat(),
-            "type": "setup",
-            "text": notes,
-            "tags": f"symbol:{sym},strategy:{strat},ok:{plan_ok}",
-            "link_id": "",
-            "meta": {"symbol": sym, "strategy": strat, "ok": bool(plan_ok)},
-        })
-        st.success("Setup saved.")
-
-    st.markdown("#### Recent setups")
-    j = fetch_journal("setup")
-    if not j.empty:
-        st.dataframe(j[["ts_utc","text","tags"]], use_container_width=True, hide_index=True, height=240)
-    else:
-        st.caption("No setups yet.")
-
-# Performance (placeholder KPIs)
-with tabs[3]:
-    st.subheader("Performance Dashboard")
-    st.caption("Hook this to your 'trades' table when fills/exits are logged.")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Trades", 0)
-    c2.metric("Win rate", "—")
-    c3.metric("Profit Factor", "—")
-    c4, c5, c6 = st.columns(3)
-    c4.metric("Avg R", "—")
-    c5.metric("Expectancy", "—")
-    c6.metric("Max DD", "—")
-
-# Emotion Log
-with tabs[4]:
-    st.subheader("Emotion Log")
-    calm = st.slider("Calm ↔ Anxious", 0, 100, 60)
-    disciplined = st.slider("Disciplined ↔ Impulsive", 0, 100, 70)
-    confident = st.slider("Confident ↔ Afraid", 0, 100, 65)
-    tags = st.multiselect("Tags", ["FOMO","Revenge","Overtrading","Hesitation","Chasing","Boredom"], [])
-    note = st.text_area("Note", height=100)
-    if st.button("Save emotion entry"):
-        insert_journal({
-            "id": f"emo_{uuid4().hex[:10]}",
-            "ts_utc": datetime.now(timezone.utc).isoformat(),
-            "type": "emotion",
-            "text": note,
-            "tags": ",".join(tags),
-            "link_id": "",
-            "meta": {"calm": calm, "disciplined": disciplined, "confident": confident},
-        })
-        st.success("Saved.")
-    st.markdown("#### Recent emotions")
-    j = fetch_journal("emotion")
-    if not j.empty:
-        st.dataframe(j[["ts_utc","tags","text"]], use_container_width=True, hide_index=True, height=240)
-    else:
-        st.caption("No entries yet.")
-
-# Trading Plan (versioned snapshots)
-with tabs[5]:
-    st.subheader("Trading Plan")
-    plan_txt = st.text_area("Plan (edit and save a new version)", height=200)
-    c1, c2 = st.columns(2)
-    if c1.button("Save new version"):
-        insert_journal({
-            "id": f"plan_{uuid4().hex[:10]}",
-            "ts_utc": datetime.now(timezone.utc).isoformat(),
-            "type": "plan",
-            "text": plan_txt,
-            "tags": "plan",
-            "link_id": "",
-            "meta": {},
-        })
-        st.success("Saved.")
-    st.markdown("#### Versions")
-    j = fetch_journal("plan")
-    if not j.empty:
-        st.dataframe(j[["ts_utc","text"]], use_container_width=True, hide_index=True, height=300)
-    else:
-        st.caption("No versions yet.")

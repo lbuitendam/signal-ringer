@@ -1,80 +1,98 @@
-# strategies/catalog.py
 from __future__ import annotations
 
 """
-Catalog wrapper around dynamic strategy discovery.
+Catalog facade used by the Scanner page.
 
-- Tries absolute import first ("strategies.registry") so running the app from project
-  root works (e.g., `streamlit run app.py`).
-- Falls back to relative import (".registry") so opening the 'strategies' package
-  in isolation also works.
-- Caches discovery so the UI can call get_catalog() frequently without re-importing
-  every module.
+Primary path:
+  - Use strategies.registry.discover_strategies() for dynamic discovery.
+
+Fallback path (if registry cannot be imported for any reason):
+  - Reflect over strategies.library exports (EmaPullback, MacdTrend, ...).
+
+get_catalog() -> {id: {name, category, params, desc, class}}
+find_by_name(q, category?) -> list of ids
+refresh_catalog() -> clear cache (when adding/removing files at runtime)
 """
 
 from functools import lru_cache
-from typing import Any, Dict, List
+from typing import Dict, Any, List, Callable
+import importlib
 
-# Prefer absolute import for VS Code/Pylance; fall back to relative when needed.
-try:
-    from strategies.registry import discover_strategies as _discover  # type: ignore[import-not-found]
-except Exception:  # pragma: no cover
-    from .registry import discover_strategies as _discover  # type: ignore
+# ---------- dynamic import with safe fallback ----------
+def _import_discover() -> Callable[[], Dict[str, Dict[str, Any]]]:
+    try:
+        return importlib.import_module("strategies.registry").discover_strategies  # type: ignore
+    except Exception:
+        # Fallback: build a tiny in-memory catalog from strategies.library exports
+        try:
+            from strategies.base import BaseStrategy
+            from strategies import library as lib  # type: ignore
+
+            def _fallback() -> Dict[str, Dict[str, Any]]:
+                out: Dict[str, Dict[str, Any]] = {}
+                for name in getattr(lib, "__all__", []):
+                    cls = getattr(lib, name, None)
+                    if cls and isinstance(cls, type) and issubclass(cls, BaseStrategy):
+                        key = f"strategies.library.{name}.{name}"
+                        nm = getattr(cls, "name", name)
+                        cat = getattr(cls, "CATEGORY", "Uncategorized")
+                        schema = getattr(cls, "PARAMS_SCHEMA", {})
+                        desc = getattr(cls, "DESC", "") or (cls.__doc__ or "").strip().splitlines()[0] if cls.__doc__ else ""
+                        if not isinstance(schema, dict) or not schema:
+                            # crude inference (minimal)
+                            schema = {}
+                        out[key] = {
+                            "name": nm,
+                            "category": cat,
+                            "schema": schema,
+                            "defaults": {k: v.get("default") for k, v in schema.items()},
+                            "desc": desc,
+                            "class": cls,
+                        }
+                return out
+
+            return _fallback
+        except Exception:
+            # Last-resort: empty
+            return lambda: {}
+
+_discover = _import_discover()
 
 
 @lru_cache(maxsize=1)
 def _discovered() -> Dict[str, Dict[str, Any]]:
-    """
-    Returns the raw discovery map:
-      { sid: {"name","category","schema","defaults","class", ...}, ... }
-    """
-    return _discover()
+    return _discover()  # {sid: {"name","category","schema","defaults","desc","class"}}
 
 
 def refresh_catalog() -> None:
-    """Clear the discovery cache (e.g., after adding new strategy files)."""
     _discovered.cache_clear()
 
 
 def get_catalog() -> Dict[str, Dict[str, Any]]:
-    """
-    Shape the discovery output to what pages/1_Scanner.py expects:
-      { sid: {"name","category","params","desc","class"} }
-    """
     cat = _discovered()
-    out: Dict[str, Dict[str, Any]] = {}
-    for sid, meta in cat.items():
-        out[sid] = {
-            "name": meta.get("name", sid.rsplit(".", 1)[-1]),
-            "category": meta.get("category", "Uncategorized"),
-            "params": meta.get("schema", {}),   # Scanner expects key "params"
-            "desc": meta.get("desc", ""),
-            "class": meta.get("class"),
+    return {
+        sid: {
+            "name": m["name"],
+            "category": m.get("category", "Uncategorized"),
+            "params": m.get("schema", {}),
+            "desc": m.get("desc", ""),
+            "class": m["class"],
         }
-    return out
+        for sid, m in cat.items()
+    }
 
 
 def find_by_name(q: str, category: str | None = None) -> List[str]:
-    """
-    Search by name/module id/category. Returns list of strategy ids (sid).
-    """
     cat = get_catalog()
     ql = (q or "").strip().lower()
-    ids = list(cat.keys())
-
-    if ql:
-        ids = [
-            sid
-            for sid in ids
-            if ql in cat[sid]["name"].lower()
-            or ql in sid.lower()
-            or ql in cat[sid]["category"].lower()
-        ]
-
+    ids = [
+        k
+        for k in cat
+        if not ql
+        or ql in k.lower()
+        or ql in cat[k]["name"].lower()
+        or ql in cat[k]["category"].lower()
+    ]
     if category and category != "All":
-        ids = [sid for sid in ids if cat[sid]["category"] == category]
-
+        ids = [i for i in ids if cat[i]["category"] == category]
     return ids
-
-
-__all__ = ["get_catalog", "find_by_name", "refresh_catalog"]

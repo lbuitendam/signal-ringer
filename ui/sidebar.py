@@ -1,11 +1,12 @@
-# ui/sidebar.py
 from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Dict, Any, List
+
 import pandas as pd
 import streamlit as st
 
+from data.provider import normalize_watchlist
 from engine.singleton import get_engine
 from risk.manager import RiskOptions
 
@@ -18,16 +19,13 @@ DEFAULTS = {
         {"symbol": "MSFT",    "asset": "stock",  "timeframe": "5m", "adapter": "yfinance", "enabled": True},
         {"symbol": "BTC-USD", "asset": "crypto", "timeframe": "5m", "adapter": "yfinance", "enabled": False},
     ],
-    "strategies": {
-        "enabled": {
-            "EMA20/50 Pullback": {"enabled": True, "params": {}, "approved": True},
-            "MACD Trend":        {"enabled": True, "params": {}, "approved": True},
-            "Range Breakout":    {"enabled": True, "params": {"lookback": 20, "retest": 5}, "approved": True},
-            "Bullish Engulfing": {"enabled": True, "params": {}, "approved": True},
-            "Bearish Engulfing": {"enabled": True, "params": {}, "approved": True},
-        },
-        "big_boss": {"enabled": True, "k_bars": 3, "tol": 0.003},
-        "min_conf": 0.0,
+"strategies": {
+    "enabled": {
+        "EMA20/50 Pullback": {"enabled": True, "params": {}, "approved": True},
+        "MACD Trend":        {"enabled": True, "params": {}, "approved": True},
+        "Range Breakout":    {"enabled": True, "params": {"lookback": 20, "retest": 5}, "approved": True},
+    },
+
     },
     "risk": {
         "equity": 10000.0, "risk_pct": 0.01, "atr_mult_sl": 1.5, "rr": 2.0,
@@ -101,7 +99,7 @@ def sidebar():
         if est.get("error"): _chip("Error", "#ef4444")
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # ---- Watchlist editor (INSIDE the function!)
+    # ---- Watchlist editor
     with st.sidebar.expander("Watchlist", expanded=False):
         df = pd.DataFrame(wl)
         edited = st.data_editor(
@@ -110,9 +108,12 @@ def sidebar():
         )
         if st.button("Save watchlist"):
             s2 = load_settings()
-            s2["watchlist"] = edited.fillna("").to_dict("records")
+            new_wl = edited.fillna("").to_dict("records")
+            new_wl = normalize_watchlist(new_wl)
+            s2["watchlist"] = new_wl
             save_settings(s2)
-            st.success("Saved. Restart engine to apply.")
+            st.success("Saved. Engine will pick this up on next rerun.")
+            st.rerun()
 
     # Persist and push to engine every run
     opts["big_boss"]["enabled"] = bool(big_boss)
