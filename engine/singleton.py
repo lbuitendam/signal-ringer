@@ -5,14 +5,13 @@ import asyncio
 import hashlib
 import queue
 import threading
-import time
 import traceback
 from datetime import datetime, timezone
 from typing import Any, Dict
 
 import streamlit as st
 
-from engine.runner import scan_once          # async or sync function (we handle both)
+from engine.runner import scan_once          # async or sync; we handle both
 from engine.utils import OrderSuggestion
 from storage import upsert_alerts
 
@@ -26,7 +25,7 @@ class LiveEngine:
     """
     Background scanner engine:
       - Runs scan_once(...) in a dedicated thread.
-      - If scan_once is async, uses asyncio.run() per cycle (simple & safe).
+      - If scan_once is async, uses asyncio.run() per cycle.
       - Emits OrderSuggestion via _emit() into a thread-safe Queue for the UI.
     """
 
@@ -46,6 +45,16 @@ class LiveEngine:
         self._last_tick_utc: str | None = None
         self._error_msg: str = ""
 
+    # ---------- helpers ----------
+    @staticmethod
+    def _norm_tracker(t: Any) -> Dict[str, Any]:
+        if isinstance(t, dict):
+            out = dict(t)
+            out["symbol"] = str(out.get("symbol", out.get("ticker", ""))).upper()
+            out["enabled"] = bool(out.get("enabled", True))
+            return out
+        return {"symbol": str(t).upper(), "enabled": True}
+
     # ---------- lifecycle ----------
     def is_running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
@@ -64,14 +73,18 @@ class LiveEngine:
         self._thread = None
 
     # ---------- configuration ----------
-    def configure(self, *, trackers, strategies_cfg, risk_opts, interval_sec: float = 8.0) -> None:
-        """
-        Safe to call on every Streamlit rerun. Does NOT auto-start the engine.
-        Call engine.start()/engine.stop() from your sidebar toggle.
-        """
+    def configure(
+        self,
+        *,
+        trackers,
+        strategies_cfg,
+        risk_opts,
+        interval_sec: float = 8.0,
+    ) -> None:
+        """Safe to call on every Streamlit rerun. Does NOT auto-start the engine."""
         with self._lock:
             self._cfg.update(
-                trackers=list(trackers or []),
+                trackers=[self._norm_tracker(t) for t in (trackers or [])],
                 strategies_cfg=dict(strategies_cfg or {}),
                 risk_opts=risk_opts,
                 interval_sec=float(interval_sec or 8.0),
@@ -80,9 +93,10 @@ class LiveEngine:
     # ---------- status for UI ----------
     def status(self) -> Dict[str, Any]:
         with self._lock:
+            trackers = [self._norm_tracker(t) for t in self._cfg.get("trackers", [])]
             return {
                 "running": self.is_running(),
-                "active_symbols": sum(1 for t in self._cfg["trackers"] if t.get("enabled", True)),
+                "active_symbols": sum(1 for t in trackers if t.get("enabled", True)),
                 "last_tick_utc": self._last_tick_utc,
                 "error": self._error_msg,
             }
@@ -107,7 +121,6 @@ class LiveEngine:
                 "reason": getattr(sug, "reason", ""),
             },
         }
-        # persist (best-effort)
         try:
             upsert_alerts([{
                 "id": row["id"], "time": row["time"], "symbol": row["symbol"], "tf": row["tf"],
@@ -116,23 +129,18 @@ class LiveEngine:
             }])
         except Exception:
             pass
-
-        # enqueue for UI
         self.q.put(row)
 
     # ---------- worker thread ----------
     def _run(self) -> None:
         while not self._stop.is_set():
-            # snapshot config
             with self._lock:
-                trackers = self._cfg["trackers"]
-                strategies_cfg = self._cfg["strategies_cfg"]
+                trackers = list(self._cfg["trackers"])
+                strategies_cfg = dict(self._cfg["strategies_cfg"])
                 risk_opts = self._cfg["risk_opts"]
                 sleep_s = float(self._cfg["interval_sec"])
 
             try:
-                # If scan_once is async, asyncio.run will await it.
-                # If it's sync, asyncio.run would fail — so we call directly.
                 if asyncio.iscoroutinefunction(scan_once):
                     asyncio.run(
                         scan_once(
@@ -149,22 +157,16 @@ class LiveEngine:
                         risk_opts=risk_opts,
                         on_suggestion=self._emit,
                     )
-
                 self._last_tick_utc = datetime.now(timezone.utc).isoformat()
                 self._error_msg = ""
             except Exception:
-                # capture, surface, and keep running
                 self._error_msg = traceback.format_exc()
 
-            # pacing, but allow fast exit
             if self._stop.wait(timeout=max(1.5, sleep_s)):
                 break
 
 
 @st.cache_resource
 def get_engine() -> LiveEngine:
-    """
-    Streamlit-cached singleton. Use .configure(...) each rerun.
-    Start/stop the thread from your sidebar (or wherever) with engine.start()/engine.stop().
-    """
+    """Streamlit-cached singleton."""
     return LiveEngine()
