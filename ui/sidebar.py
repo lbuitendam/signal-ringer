@@ -61,7 +61,7 @@ def sidebar():
     st.sidebar.page_link("app.py", label="📊 Dashboard")
     st.sidebar.page_link("pages/1_Scanner.py", label="🧠 Scanner (Patterns & Strategies)")
     st.sidebar.page_link("pages/2_Backtesting.py", label="🔁 Backtesting")
-    st.sidebar.page_link("pages/3_History_&_Journal.py", label="🗂 History & Journal")
+    st.sidebar.page_link("pages/3_History_and_Journal.py", label="🗂 History & Journal")
     st.sidebar.page_link("pages/4_User_Settings.py", label="👤 User Settings")
 
     st.sidebar.markdown("---")

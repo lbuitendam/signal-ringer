@@ -122,16 +122,30 @@ def preview_markers(ts: pd.Timestamp, entry: float, sl: float, tps: List[float])
         m.append({"id": f"pv-tp{k}-{base}", "time": base, "position": "inBar", "shape": "circle", "color": "#10b981", "text": f"TP{k} {tp:.2f}"})
     return m
 
-# ---------------- UI: Symbol picker (quick picks + recent + examples) ----------------
+# ---------------- Settings & Watchlist (normalize BEFORE use) ----------------
+
+def _normalize_watchlist(wl_raw: list[Any]) -> list[dict[str, Any]]:
+    norm: list[dict[str, Any]] = []
+    for item in wl_raw:
+        if isinstance(item, dict):
+            d = dict(item)
+        else:
+            d = {"symbol": str(item), "enabled": True}
+        d.setdefault("enabled", True)
+        norm.append(d)
+    return norm
+
 s = load_settings()
-wl = s.get("watchlist", [])
-watch_syms = [w.get("symbol","") for w in wl if w.get("enabled", True)]
+wl = _normalize_watchlist(s.get("watchlist", []))
+watch_syms = [d.get("symbol", "") for d in wl if d.get("enabled", True)]
 examples = ["AAPL","MSFT","NVDA","SPY","QQQ","BTC-USD","ETH-USD","XAUUSD=X","XAGUSD=X"]
 
 if "scanner_recent" not in st.session_state:
     st.session_state["scanner_recent"] = []
 if "scanner_symbol" not in st.session_state:
     st.session_state["scanner_symbol"] = (watch_syms[0] if watch_syms else "AAPL")
+
+# ---------------- UI: Symbol picker (quick picks + recent + examples) ----------------
 
 def _pick(sym: str):
     sym = (sym or "").strip().upper()
@@ -154,12 +168,15 @@ with st.container():
                   args=(st.session_state.get("scanner_input",""),))
     with c3:
         if st.button("📌 Pin", use_container_width=True):
-            sym = st.session_state.get("scanner_input","").strip().upper()
+            sym = st.session_state.get("scanner_input",""
+            ).strip().upper()
             if sym and sym not in watch_syms:
                 wl.append({"symbol": sym, "asset": "stock", "timeframe": "5m", "adapter": "yfinance", "enabled": True})
                 s["watchlist"] = wl
                 save_settings(s)
                 st.success(f"Added {sym} to watchlist")
+                # refresh local list
+                watch_syms[:] = [d.get("symbol", "") for d in wl if d.get("enabled", True)]
     if watch_syms:
         st.caption("Quick picks — Watchlist")
         cols = st.columns(min(8, len(watch_syms)))
@@ -178,6 +195,7 @@ with st.container():
         with cols[i % len(cols)]:
             st.button(sym, key=f"qp_e_{sym}", on_click=_pick, args=(sym,))
 
+# Current ticker
 ticker = st.session_state["scanner_symbol"]
 
 # ---------------- Main controls ----------------
@@ -197,13 +215,17 @@ if "patterns_state" not in st.session_state:
 pkey = f"{ticker}@{interval}"
 pst = st.session_state["patterns_state"].setdefault(
     pkey,
-    {"enabled": True, "min_conf": PAT_DEFAULTS["min_confidence"],
+    {"enabled": True, "min_conf": float(PAT_DEFAULTS.get("min_confidence", 0.6)),
      "enabled_names": [], "cfg": PAT_DEFAULTS.copy(), "last_alert_idx": {}}
 )
+
 if show_patterns:
     with st.expander("Pattern Controls", expanded=False):
-        pst["enabled"] = st.toggle("Enable pattern engine", value=bool(pst["enabled"]))
-        pst["min_conf"] = float(st.slider("Only alert if confidence ≥", 0.0, 1.0, float(pst["min_conf"]), 0.05))
+        pst["enabled"] = st.toggle("Enable pattern engine", value=bool(pst.get("enabled", True)))
+        # clamp min_conf into [0,1]
+        mc = float(pst.get("min_conf", 0.6))
+        mc = max(0.0, min(1.0, mc))
+        pst["min_conf"] = float(st.slider("Only alert if confidence ≥", 0.0, 1.0, mc, 0.05))
         if st.button("Restore default thresholds"):
             pst["cfg"] = PAT_DEFAULTS.copy()
             st.success("Pattern thresholds restored.")
@@ -215,7 +237,7 @@ if show_patterns:
             "Three Outside Up","Three Outside Down","Marubozu","Rising Window","Falling Window",
             "Tasuki Up","Tasuki Down","Kicker Bull","Kicker Bear","Rising Three Methods","Falling Three Methods","Mat Hold",
         ]
-        chosen = set(pst["enabled_names"])
+        chosen = set(pst.get("enabled_names", []))
         sel = []
         cols = st.columns(3)
         for i, nm in enumerate(all_names):
@@ -243,18 +265,18 @@ with st.expander("Strategy Signals (select to compute locally)", expanded=False)
         key=f"strats_{ticker}_{interval}"
     )
     min_conf_strat = st.slider("Min confidence (strategy)", 0.0, 1.0, 0.6, 0.05, key=f"minconf_{ticker}_{interval}")
-    max_per_strat = st.number_input("Max signals/strategy (recent window)", 1, 10, 3, key=f"maxper_{ticker}_{interval}")
+    max_per_strat = st.number_input("Max signals/strategy (recent window)", min_value=1, max_value=10, value=3, step=1, key=f"maxper_{ticker}_{interval}")
 
     # persist selection back to settings (keep existing params)
-    new_enabled = {}
+    new_enabled: Dict[str, Dict[str, Any]] = {}
     for nm in sel_strats:
-        row = enabled_block.get(nm, {"enabled": True, "params": {}, "approved": True})
+        row = dict(enabled_block.get(nm, {"enabled": True, "params": {}, "approved": True}))
         row["enabled"] = True
         new_enabled[nm] = row
     # disable any previously-enabled known items that were unselected
     for nm in enabled_names:
         if (nm in cat_names) and (nm not in sel_strats):
-            row = enabled_block.get(nm, {"enabled": False, "params": {}, "approved": True})
+            row = dict(enabled_block.get(nm, {"enabled": False, "params": {}, "approved": True}))
             row["enabled"] = False
             new_enabled[nm] = row
 
@@ -280,11 +302,11 @@ df_slice = df.iloc[-N:].copy()
 
 # --------------- Detect patterns ---------------
 hits = []
-pat_markers = []
-if show_patterns and pst.get("enabled", True) and pst["enabled_names"]:
+pat_markers: list[dict[str, Any]] = []
+if show_patterns and pst.get("enabled", True) and pst.get("enabled_names"):
     try:
         hits = detect_all(df_slice, pst["enabled_names"], pst["cfg"])
-        hits = [h for h in hits if h.confidence >= pst["min_conf"]]
+        hits = [h for h in hits if h.confidence >= float(pst.get("min_conf", 0.6))]
     except Exception as e:
         st.error(f"Pattern detection failed: {e}")
 # Shift to full DF index & markers
@@ -311,7 +333,7 @@ if show_strats and sel_strats:
                     "volume": (df_slice["Volume"].values if "Volume" in df_slice else np.zeros(len(df_slice)))
                 }, index=df_slice.index)
             )
-            sigs = [s for s in sigs if s.confidence >= min_conf_strat]
+            sigs = [s for s in sigs if s.confidence >= float(min_conf_strat)]
             sigs = sigs[-int(max_per_strat):]
             for s1 in sigs:
                 strat_hits.append({
@@ -331,7 +353,7 @@ if strat_hits:
 strat_markers = strat_signals_to_markers(strat_hits, df)
 
 # --------------- Optional backtrade preview (pick one row) ---------------
-preview = []
+preview: list[dict[str, Any]] = []
 with st.expander("Backtrade preview (pick one row below)"):
     pick_src = st.radio("Source", ["Strategy", "Pattern"], horizontal=True, key=f"picksrc_{ticker}_{interval}")
     if pick_src == "Strategy" and strat_hits:
@@ -377,7 +399,7 @@ ohlcv_payload = [
         (df["Volume"] if "Volume" in df else [0]*len(df))
     )
 ]
-markers = []
+markers: list[dict[str, Any]] = []
 if show_patterns: markers += pat_markers
 if show_strats:   markers += strat_markers
 if preview:       markers += preview
