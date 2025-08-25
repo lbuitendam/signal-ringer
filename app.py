@@ -1,5 +1,4 @@
-# app.py — Signal-Ringer 4-Tile Dashboard
-
+# app.py — Signal-Ringer 4-Tile Dashboard (fixed)
 from __future__ import annotations
 
 import json
@@ -7,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 from uuid import uuid4
-
+from dataclasses import fields as _dataclass_fields
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -86,7 +85,7 @@ DEFAULTS: Dict[str, Any] = {
         ],
     },
     "strategies": {"enabled": ["EMA50/200 Golden Cross", "RSI Mean Revert", "Breakout 20-High"], "params": {}},
-    "risk": {"risk_pct": 1.0, "commission_bps": 1.0, "slippage_bps": 2.0},
+    "risk": {"risk_pct": 1.0, "commission_bps": 1.0, "slippage_bps": 2.0},  # risk_pct stored as percent in UI
 }
 
 # ---------------------- Settings IO ----------------------
@@ -144,11 +143,26 @@ if "drawings" not in st.session_state:
 
 nav, wl, opts, risk, qc = sidebar()
 
-# Clamp & configure risk safely
-rp = float(risk.get("risk_pct", 0.01))
+# --- normalize RiskOptions input (UI uses percent; engine expects fraction) ---
+if not isinstance(risk, dict):
+    risk = {}
+
+rp_raw = risk.get("risk_pct", SETTINGS.get("risk", {}).get("risk_pct", 1.0))
+try:
+    rp = float(rp_raw)
+except Exception:
+    rp = 1.0
+# convert percent→fraction if user entered 1..10
 if rp > 1:
     rp /= 100.0
-risk_opts = RiskOptions(**{**risk, "risk_pct": max(0.0005, min(0.10, rp))})
+# clamp to sane range
+rp = max(0.0005, min(0.10, rp))
+
+# keep only fields RiskOptions accepts
+_allowed = {f.name for f in _dataclass_fields(RiskOptions)}
+base = {k: v for k, v in risk.items() if k in _allowed}
+base["risk_pct"] = rp
+risk_opts = RiskOptions(**base)
 
 if eng:
     eng.configure(
@@ -165,7 +179,6 @@ if eng and (eng.is_running() or qc.get("engine_on")):
 # ---------------------- Data / Indicators ----------------------
 INTERVAL_MAP = {"1m": "1m", "5m": "5m", "15m": "15m", "1H": "60m", "1D": "1d"}
 PERIOD_BY_TIMEFRAME = {"1m": "7d", "5m": "60d", "15m": "60d", "1H": "730d", "1D": "5y"}
-
 
 @st.cache_data(show_spinner=False, ttl=60)
 def fetch_ohlcv(symbol: str, timeframe: str) -> pd.DataFrame:
@@ -266,7 +279,6 @@ def ema_slope(close: pd.Series, n: int = 50) -> pd.Series:
     e = ema(close, n)
     return e.diff()
 
-
 # ---------------------- UI Helpers ----------------------
 TILE_TYPES = ["Chart", "Scanner", "Backtest", "Journal", "Metrics"]
 TIMEFRAMES = ["1m", "5m", "15m", "1H", "1D"]
@@ -279,7 +291,8 @@ with nav_cols[1]:
 with nav_cols[2]:
     st.page_link("pages/2_Backtesting.py", label="Backtesting")
 with nav_cols[3]:
-    st.page_link("pages/3_History_&_Journal.py", label="History & Journal")
+    # Use a safe filename (no &). Make sure this file exists in pages/
+    st.page_link("pages/3_History_and_Journal.py", label="History & Journal")
 with nav_cols[4]:
     st.page_link("pages/4_User_Settings.py", label="User Settings")
 
@@ -342,7 +355,6 @@ def _markers_from_alerts(symbol: str, tf: str, df: pd.DataFrame) -> List[Dict[st
         pass
     return out
 
-
 # ---------------------- Sidebar: Global & Per-tile Editors ----------------------
 st.sidebar.markdown("### Dashboard Controls")
 
@@ -365,7 +377,7 @@ persist = st.sidebar.checkbox(
     value=bool(SETTINGS.get("dashboard", {}).get("persist", True)),
 )
 
-# Risk/Costs
+# Risk/Costs (displayed in PERCENT; stored as percent)
 st.sidebar.markdown("**Risk & Costs**")
 risk_pct = st.sidebar.number_input(
     "Risk % (display only)", min_value=0.1, max_value=10.0,
@@ -385,7 +397,7 @@ SETTINGS["watchlist"] = _coerce_symbols(wl)
 SETTINGS["timeframes"] = [tf for tf in tfs if tf in TIMEFRAMES]
 SETTINGS.setdefault("risk", {})
 SETTINGS["risk"].update({
-    "risk_pct": float(risk_pct),
+    "risk_pct": float(risk_pct),  # still percent here!
     "commission_bps": float(comm_bps),
     "slippage_bps": float(slip_bps),
 })
@@ -893,7 +905,6 @@ def _metrics_tile(tile: Dict[str, Any]):
         st.line_chart(s2, height=120)
     with sc3:
         st.line_chart(s3, height=120)
-
 
 # ---------------------- Layout: 2×2 grid ----------------------
 st.markdown("## Dashboard")
